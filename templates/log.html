@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Editorial Log — {{ label }} — {{ date }}</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0a0c0e;--bg2:#12141a;--bg3:#1a1e24;
+  --fg:#b0b8c0;--fg2:#888e96;--fg3:#5a6068;
+  --accent:#3b82f6;--green:#22c55e;--yellow:#eab308;--red:#ef4444;
+  --border:#222830;
+  --mono:'SF Mono','Cascadia Code','Consolas',monospace;
+}
+html{font-size:15px}
+body{background:var(--bg);color:var(--fg);font-family:var(--mono);line-height:1.65;padding:2rem;max-width:56rem;margin:0 auto}
+a{color:var(--accent);text-decoration:underline;text-underline-offset:2px;word-break:break-all}
+a:hover{color:#93c5fd}
+
+.back{display:inline-block;margin-bottom:1.5rem;font-size:.8rem;color:var(--fg3);text-decoration:none;border:1px solid var(--border);padding:.3rem .6rem;border-radius:3px}
+.back:hover{color:var(--fg);border-color:var(--fg3)}
+
+h1{font-size:1.1rem;color:var(--fg);margin-bottom:.2rem;font-weight:600}
+.meta{font-size:.75rem;color:var(--fg3);margin-bottom:2rem;padding-bottom:1rem;border-bottom:1px solid var(--border)}
+
+.log-content h1{font-size:1rem;color:var(--fg);margin:2rem 0 .5rem;border-bottom:1px solid var(--border);padding-bottom:.3rem}
+.log-content h2{font-size:.9rem;color:var(--fg);margin:1.5rem 0 .4rem}
+.log-content h3{font-size:.8rem;color:var(--fg2);margin:1rem 0 .3rem}
+.log-content p{margin:.4rem 0;font-size:.85rem}
+.log-content ul,.log-content ol{margin:.4rem 0 .4rem 1.5rem;font-size:.85rem}
+.log-content li{margin:.2rem 0}
+.log-content table{width:100%;border-collapse:collapse;margin:.8rem 0;font-size:.78rem}
+.log-content th,.log-content td{padding:.35rem .5rem;border:1px solid var(--border);text-align:left;vertical-align:top}
+.log-content th{background:var(--bg3);font-weight:600;position:sticky;top:0}
+.log-content tr:nth-child(even){background:var(--bg2)}
+.log-content code{background:var(--bg3);padding:.1em .3em;border-radius:2px;font-size:.85em}
+.log-content pre{background:var(--bg2);border:1px solid var(--border);padding:.6rem;border-radius:3px;overflow-x:auto;margin:.6rem 0}
+.log-content pre code{background:none;padding:0}
+.log-content blockquote{border-left:2px solid var(--fg3);padding:.3rem .8rem;margin:.6rem 0;color:var(--fg2)}
+
+/* Source diversity chart */
+.diversity-chart{margin:1.5rem 0;padding:1rem;background:var(--bg2);border:1px solid var(--border);border-radius:4px}
+.diversity-title{font-size:.75rem;color:var(--fg3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:.6rem}
+.diversity-bar{display:flex;align-items:center;margin:.3rem 0}
+.diversity-label{width:120px;font-size:.72rem;color:var(--fg2);flex-shrink:0}
+.diversity-track{flex:1;height:14px;background:var(--bg3);border-radius:2px;overflow:hidden}
+.diversity-fill{height:100%;border-radius:2px;transition:width .5s ease}
+.diversity-value{width:30px;text-align:right;font-size:.7rem;color:var(--fg3);margin-left:.4rem}
+
+@media print{
+  body{background:#fff;color:#000}
+  a{color:#000}
+  .back{display:none}
+}
+</style>
+</head>
+<body>
+<a class="back" href="/">← Back to Dashboard</a>
+<h1>📋 Editorial Log — {{ label }}</h1>
+<div class="meta">{{ date }} · This document shows how the report was sourced, verified, and assembled.</div>
+
+{% if diversity %}
+<div class="diversity-chart">
+  <div class="diversity-title">Source Diversity</div>
+  {% for source, count in diversity.items() %}
+  <div class="diversity-bar">
+    <span class="diversity-label">{{ source }}</span>
+    <div class="diversity-track">
+      <div class="diversity-fill" style="width:{{ (count / diversity.values()|max * 100)|round }}%;background:{% if loop.index % 3 == 1 %}var(--green){% elif loop.index % 3 == 2 %}var(--accent){% else %}var(--yellow){% endif %}"></div>
+    </div>
+    <span class="diversity-value">{{ count }}</span>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<div class="log-content">{{ html|safe }}</div>
+</body>
+</html>

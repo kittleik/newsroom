@@ -6,7 +6,7 @@ import re
 from collections import defaultdict
 from pathlib import Path
 
-from flask import Flask, jsonify, render_template
+from flask import Flask, jsonify, render_template, abort
 import markdown
 
 app = Flask(__name__)
@@ -28,18 +28,24 @@ CATEGORY_MAP = {
 }
 
 SLUG_LABELS = {
-    "world": "World Overview",
-    "europe": "Europe",
-    "mideast": "Middle East",
-    "africa": "Africa",
-    "asia": "Asia-Pacific",
-    "americas": "Americas",
-    "state-media": "State Media Watch",
-    "tech": "Tech Overview",
-    "tech-ai": "AI & ML",
-    "tech-security": "Cybersecurity",
-    "tech-crypto": "Crypto & Blockchain",
+    "world": "🌍 World",
+    "europe": "📰 Europe",
+    "mideast": "📰 Mideast",
+    "africa": "📰 Africa",
+    "asia": "📰 Asia-Pacific",
+    "americas": "📰 Americas",
+    "state-media": "📰 State Media",
+    "tech": "💻 Tech",
+    "tech-ai": "💻 AI",
+    "tech-security": "💻 Security",
+    "tech-crypto": "💻 Crypto",
 }
+
+# Canonical order for tab display
+SLUG_ORDER = [
+    "world", "europe", "mideast", "africa", "asia", "americas",
+    "state-media", "tech", "tech-ai", "tech-security", "tech-crypto",
+]
 
 COORDS = {
     "norway": (59.9, 10.7), "sweden": (59.3, 18.1), "finland": (60.2, 24.9),
@@ -61,7 +67,6 @@ COORDS = {
     "switzerland": (46.9, 7.4), "oman": (23.6, 58.5),
 }
 
-# Aliases that map to a COORDS key
 LOCATION_ALIASES = {
     "united states": "usa", "u.s.": "usa", "america": "usa", "washington": "usa",
     "american": "usa", "pentagon": "usa", "white house": "usa",
@@ -72,7 +77,7 @@ LOCATION_ALIASES = {
     "moscow": "russia", "russian": "russia", "kremlin": "russia",
     "beijing": "china", "chinese": "china",
     "tokyo": "japan", "japanese": "japan",
-    "iranian": "iran", "tehran": "iran", "tehran": "iran",
+    "iranian": "iran", "tehran": "iran",
     "israeli": "israel", "tel aviv": "israel", "jerusalem": "israel", "netanyahu": "israel",
     "palestinian": "palestine", "west bank": "palestine",
     "turkish": "turkey", "ankara": "turkey", "istanbul": "turkey",
@@ -110,13 +115,11 @@ LOCATION_ALIASES = {
     "arabian sea": "oman",
 }
 
-# Build a sorted (longest-first) pattern list for matching
 _all_locations = {}
 for k in COORDS:
     _all_locations[k] = k
 for alias, key in LOCATION_ALIASES.items():
     _all_locations[alias] = key
-# Sort by length descending so "south korea" matches before "south" or "korea"
 _LOCATION_PATTERNS = sorted(_all_locations.keys(), key=len, reverse=True)
 _LOCATION_RE = re.compile(
     r'\b(' + '|'.join(re.escape(p) for p in _LOCATION_PATTERNS) + r')(?:\b|(?=\s|[,.\-:;\'"!\?]))',
@@ -144,8 +147,32 @@ def render_md(text):
     return html
 
 
+def render_log_md(text):
+    """Render log markdown - make all URLs clickable even if not in markdown link format."""
+    # First do normal markdown render
+    html = markdown.markdown(
+        text,
+        extensions=["tables", "fenced_code", "nl2br"],
+    )
+    html = html.replace("<a ", '<a target="_blank" rel="noopener" ')
+    # Make bare URLs clickable (not already in href)
+    html = re.sub(
+        r'(?<!href=")(?<!">)(https?://[^\s<>"]+)',
+        r'<a href="\1" target="_blank" rel="noopener">\1</a>',
+        html
+    )
+    return html
+
+
+def word_count(text):
+    return len(re.findall(r'\w+', text))
+
+
+def reading_time_minutes(text):
+    return max(1, round(word_count(text) / 230))
+
+
 def extract_headline(text):
-    """Get the first H1 or H2 or first non-empty line."""
     for line in text.splitlines():
         line = line.strip()
         if line.startswith("# "):
@@ -159,8 +186,15 @@ def extract_headline(text):
     return "Report"
 
 
+def extract_headings(html):
+    """Extract h2 headings for TOC generation (done client-side, but we pass raw text headings)."""
+    headings = []
+    for m in re.finditer(r'^##\s+(.+)$', html, re.MULTILINE):
+        headings.append(m.group(1).strip())
+    return headings
+
+
 def detect_trust(text):
-    """Dominant trust rating in a paragraph."""
     high = len(re.findall(r"🟢\s*HIGH", text))
     med = len(re.findall(r"🟡\s*MED", text))
     state = len(re.findall(r"🔴\s*STATE", text))
@@ -171,24 +205,31 @@ def detect_trust(text):
     return "high"
 
 
-def extract_geo_markers(text, slug, label):
-    """Extract geo markers from report text. Returns list of {lat,lng,trust,headline,label,country}."""
-    headline = extract_headline(text)
+def extract_countries_from_text(text):
+    """Return list of unique country keys mentioned in text."""
+    found = _LOCATION_RE.findall(text)
+    seen = []
+    seen_keys = set()
+    for loc_match in found:
+        key = _all_locations.get(loc_match.lower())
+        if key and key not in seen_keys:
+            seen_keys.add(key)
+            seen.append(key)
+    return seen
 
-    # Split into sections by H2
+
+def extract_geo_markers(text, slug, label):
+    headline = extract_headline(text)
     sections = re.split(r'\n(?=## )', text)
     markers = []
-    seen_locations = set()  # per-report dedup by country key
+    seen_locations = set()
 
     for section in sections:
         section_headline = headline
         first_line = section.strip().split('\n')[0].strip()
         if first_line.startswith("## "):
             section_headline = first_line.lstrip("# ").strip()
-
         trust = detect_trust(section)
-
-        # Find all location mentions
         found = _LOCATION_RE.findall(section)
         for loc_match in found:
             key = _all_locations.get(loc_match.lower())
@@ -197,60 +238,30 @@ def extract_geo_markers(text, slug, label):
             seen_locations.add(key)
             lat, lng = COORDS[key]
             markers.append({
-                "lat": lat,
-                "lng": lng,
-                "trust": trust,
+                "lat": lat, "lng": lng, "trust": trust,
                 "headline": section_headline[:150],
-                "label": label,
-                "country": key.title(),
+                "label": label, "country": key.title(),
+                "countryKey": key,
             })
-
     return markers
 
 
-@app.route("/api/map-data")
-def api_map_data():
-    """Return all geo markers from the most recent date's reports."""
-    # Find most recent date
-    dates = set()
-    if REPORTS_DIR.exists():
-        for f in REPORTS_DIR.iterdir():
-            parsed = parse_filename(f.name)
-            if parsed:
-                dates.add(parsed[0])
-    if not dates:
-        return jsonify([])
-    date = max(dates)
-
-    # Collect markers, group by country
-    country_data = defaultdict(lambda: {"headlines": [], "trust": "high"})
-    if REPORTS_DIR.exists():
-        for f in sorted(REPORTS_DIR.iterdir()):
-            parsed = parse_filename(f.name)
-            if not parsed or parsed[0] != date:
-                continue
-            slug = parsed[1]
-            label = SLUG_LABELS.get(slug, slug.replace("-", " ").title())
-            content = f.read_text(encoding="utf-8")
-            markers = extract_geo_markers(content, slug, label)
-            for m in markers:
-                key = m["country"]
-                country_data[key]["lat"] = m["lat"]
-                country_data[key]["lng"] = m["lng"]
-                country_data[key]["country"] = key
-                country_data[key]["headlines"].append({
-                    "title": m["headline"],
-                    "section": m["label"],
-                    "trust": m["trust"],
-                })
-                # Worst trust wins
-                cur = country_data[key]["trust"]
-                if m["trust"] == "state" or cur == "state":
-                    country_data[key]["trust"] = "state"
-                elif m["trust"] == "med" or cur == "med":
-                    country_data[key]["trust"] = "med"
-
-    return jsonify(list(country_data.values()))
+def parse_source_diversity(text):
+    """Parse source diversity from log files for visualization."""
+    scores = {}
+    in_diversity = False
+    for line in text.splitlines():
+        if 'source diversity' in line.lower() or 'source balance' in line.lower():
+            in_diversity = True
+            continue
+        if in_diversity:
+            m = re.match(r'[-*]\s*\*?\*?(.+?)\*?\*?\s*:\s*(\d+)', line.strip())
+            if m:
+                scores[m.group(1).strip()] = int(m.group(2))
+            elif line.strip() == '' or line.startswith('#'):
+                if scores:
+                    break
+    return scores
 
 
 @app.route("/")
@@ -264,7 +275,7 @@ def api_dates():
     if REPORTS_DIR.exists():
         for f in REPORTS_DIR.iterdir():
             parsed = parse_filename(f.name)
-            if parsed:
+            if parsed and not f.name.endswith("-log.md"):
                 dates.add(parsed[0])
     return jsonify(sorted(dates, reverse=True))
 
@@ -274,37 +285,106 @@ def api_reports(date):
     if not re.match(r"^\d{4}-\d{2}-\d{2}$", date):
         return jsonify({"error": "bad date"}), 400
 
-    groups = defaultdict(list)
+    reports_list = []
     all_markers = []
 
     if REPORTS_DIR.exists():
         for f in sorted(REPORTS_DIR.iterdir()):
             parsed = parse_filename(f.name)
-            if not parsed or parsed[0] != date:
+            if not parsed or parsed[0] != date or f.name.endswith("-log.md"):
                 continue
             slug = parsed[1]
-            cat, order = CATEGORY_MAP.get(slug, ("📰 Regional", 1))
             content = f.read_text(encoding="utf-8")
             html = render_md(content)
             label = SLUG_LABELS.get(slug, slug.replace("-", " ").title())
-            groups[cat].append({"slug": slug, "label": label, "html": html, "order": order})
+            countries = extract_countries_from_text(content)
+            headings = extract_headings(content)
+            read_time = reading_time_minutes(content)
+
+            # Check if log file exists
+            log_file = REPORTS_DIR / f"{date}-{slug}-log.md"
+            has_log = log_file.exists()
+
+            reports_list.append({
+                "slug": slug,
+                "label": label,
+                "html": html,
+                "countries": countries,
+                "headings": headings,
+                "readTime": read_time,
+                "hasLog": has_log,
+            })
 
             markers = extract_geo_markers(content, slug, label)
             all_markers.extend(markers)
 
-    result = []
-    seen = set()
-    for cat in sorted(groups.keys(), key=lambda c: groups[c][0]["order"]):
-        if cat in seen:
-            continue
-        seen.add(cat)
-        items = sorted(groups[cat], key=lambda x: x["slug"])
-        result.append({
-            "category": cat,
-            "reports": [{"slug": r["slug"], "label": r["label"], "html": r["html"]} for r in items],
-        })
+    # Sort by canonical order
+    slug_order_map = {s: i for i, s in enumerate(SLUG_ORDER)}
+    reports_list.sort(key=lambda r: slug_order_map.get(r["slug"], 99))
 
-    return jsonify({"groups": result, "markers": all_markers})
+    return jsonify({"reports": reports_list, "markers": all_markers})
+
+
+@app.route("/api/map-data")
+def api_map_data():
+    dates = set()
+    if REPORTS_DIR.exists():
+        for f in REPORTS_DIR.iterdir():
+            parsed = parse_filename(f.name)
+            if parsed and not f.name.endswith("-log.md"):
+                dates.add(parsed[0])
+    if not dates:
+        return jsonify([])
+    date = max(dates)
+
+    country_data = defaultdict(lambda: {"headlines": [], "trust": "high"})
+    if REPORTS_DIR.exists():
+        for f in sorted(REPORTS_DIR.iterdir()):
+            parsed = parse_filename(f.name)
+            if not parsed or parsed[0] != date or f.name.endswith("-log.md"):
+                continue
+            slug = parsed[1]
+            label = SLUG_LABELS.get(slug, slug.replace("-", " ").title())
+            content = f.read_text(encoding="utf-8")
+            markers = extract_geo_markers(content, slug, label)
+            for m in markers:
+                key = m["country"]
+                country_data[key]["lat"] = m["lat"]
+                country_data[key]["lng"] = m["lng"]
+                country_data[key]["country"] = key
+                country_data[key]["countryKey"] = m["countryKey"]
+                country_data[key]["headlines"].append({
+                    "title": m["headline"],
+                    "section": m["label"],
+                    "trust": m["trust"],
+                })
+                cur = country_data[key]["trust"]
+                if m["trust"] == "state" or cur == "state":
+                    country_data[key]["trust"] = "state"
+                elif m["trust"] == "med" or cur == "med":
+                    country_data[key]["trust"] = "med"
+
+    return jsonify(list(country_data.values()))
+
+
+@app.route("/report/<date>/<slug>/log")
+def report_log(date, slug):
+    if not re.match(r"^\d{4}-\d{2}-\d{2}$", date):
+        abort(400)
+    log_file = REPORTS_DIR / f"{date}-{slug}-log.md"
+    if not log_file.exists():
+        abort(404)
+    content = log_file.read_text(encoding="utf-8")
+    html = render_log_md(content)
+    label = SLUG_LABELS.get(slug, slug.replace("-", " ").title())
+    diversity = parse_source_diversity(content)
+    return render_template("log.html", html=html, date=date, slug=slug, label=label, diversity=diversity)
+
+
+@app.route("/api/coords")
+def api_coords():
+    """Return all known coordinates for client-side map panning."""
+    return jsonify({k: {"lat": v[0], "lng": v[1]} for k, v in COORDS.items()})
 
 
 if __name__ == "__main__":
