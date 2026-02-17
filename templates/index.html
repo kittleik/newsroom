@@ -199,7 +199,7 @@ body{background:var(--bg);color:var(--fg);font-family:var(--serif);line-height:1
   background:rgba(59,130,246,.15);border-radius:3px;
   animation:highlightFade 2s ease forwards;
 }
-@keyframes highlightFade{0%{background:rgba(59,130,246,.3)}100%{background:transparent}}
+@keyframes highlightFade{0%{background:rgba(59,130,246,.35)}70%{background:rgba(59,130,246,.15)}100%{background:transparent}}
 
 /* Scrollbar */
 ::-webkit-scrollbar{width:6px}
@@ -281,6 +281,14 @@ function initMap() {
   map = L.map('map', {center:[30,20], zoom:2, zoomControl:true, attributionControl:false});
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:12}).addTo(map);
   markerLayer = L.layerGroup().addTo(map);
+  // Click empty area → find nearest country and navigate
+  map.on('click', (e) => {
+    const nearest = findNearestCountry(e.latlng.lat, e.latlng.lng);
+    if (nearest) {
+      const key = nearest._countryKey;
+      if (key) scrollToCountryInArticle(key);
+    }
+  });
 }
 
 function toggleMap() {
@@ -309,7 +317,11 @@ function plotMarkers(mkrs) {
     let popup = `<div class="marker-popup"><h4>${esc(m.country)}</h4><p style="font-size:.75rem;color:#888">${esc(m.headline)}</p><div class="mp-trust popup-trust-${m.trust}">${TRUST_LABELS[m.trust]||''}</div></div>`;
     mk.bindPopup(popup, {maxWidth:280});
     // Click → scroll to country in article
-    mk.on('click', () => scrollToCountryInArticle(m.countryKey || m.country.toLowerCase()));
+    mk._countryKey = m.countryKey || m.country.toLowerCase();
+    mk.on('click', (e) => {
+      L.DomEvent.stopPropagation(e);
+      scrollToCountryInArticle(mk._countryKey);
+    });
     mk.addTo(markerLayer);
   });
 }
@@ -330,15 +342,77 @@ function panMapToCountry(countryKey) {
   }, mapOpen ? 50 : 400);
 }
 
-function scrollToCountryInArticle(countryKey) {
-  const tags = document.querySelectorAll(`.country-tag[data-country="${countryKey}"]`);
-  if (tags.length > 0) {
-    tags[0].scrollIntoView({behavior:'smooth', block:'center'});
-    tags.forEach(t => {
-      t.classList.add('highlighted');
-      setTimeout(() => t.classList.remove('highlighted'), 1500);
+function scrollToCountryInArticle(countryKey, closeMap) {
+  if (closeMap !== false && mapOpen) toggleMap();
+  // Try to find country in article text by scanning section bodies
+  const countryNames = [countryKey, countryKey.replace(/-/g,' ')];
+  const sections = document.querySelectorAll('.section-body');
+  let found = false;
+  for (const section of sections) {
+    const text = section.textContent.toLowerCase();
+    if (countryNames.some(n => text.includes(n.toLowerCase()))) {
+      // Ensure section is expanded
+      const header = section.previousElementSibling;
+      if (header && header.classList.contains('collapsed')) {
+        header.click();
+      }
+      // Find the specific paragraph/element containing the country name
+      const walker = document.createTreeWalker(section, NodeFilter.SHOW_TEXT);
+      let targetNode = null;
+      while (walker.nextNode()) {
+        if (countryNames.some(n => walker.currentNode.textContent.toLowerCase().includes(n.toLowerCase()))) {
+          targetNode = walker.currentNode.parentElement;
+          break;
+        }
+      }
+      if (targetNode) {
+        setTimeout(() => {
+          targetNode.scrollIntoView({behavior:'smooth', block:'center'});
+          targetNode.classList.add('country-mention-highlight');
+          setTimeout(() => targetNode.classList.remove('country-mention-highlight'), 2500);
+        }, mapOpen ? 50 : 350);
+      } else {
+        setTimeout(() => section.scrollIntoView({behavior:'smooth', block:'center'}), 350);
+      }
+      found = true;
+      break;
+    }
+  }
+  // Fallback: highlight country tags
+  if (!found) {
+    const tags = document.querySelectorAll(`.country-tag[data-country="${countryKey}"]`);
+    if (tags.length > 0) {
+      setTimeout(() => {
+        tags[0].scrollIntoView({behavior:'smooth', block:'center'});
+        tags.forEach(t => {
+          t.classList.add('highlighted');
+          setTimeout(() => t.classList.remove('highlighted'), 1500);
+        });
+      }, 350);
+    }
+  }
+}
+
+function findNearestCountry(lat, lng) {
+  // Find nearest marker to click point
+  let best = null, bestDist = Infinity;
+  if (!markerLayer) return null;
+  markerLayer.eachLayer(layer => {
+    const ll = layer.getLatLng();
+    const d = Math.pow(ll.lat - lat, 2) + Math.pow(ll.lng - lng, 2);
+    if (d < bestDist) { bestDist = d; best = layer; }
+  });
+  // Also check coordsCache for countries in current report
+  const r = reports.find(x => x.slug === currentSlug);
+  if (r && coordsCache) {
+    (r.countries || []).forEach(c => {
+      const cc = coordsCache[c];
+      if (!cc) return;
+      const d = Math.pow(cc.lat - lat, 2) + Math.pow(cc.lng - lng, 2);
+      if (d < bestDist) { bestDist = d; best = {_countryKey: c}; }
     });
   }
+  return best;
 }
 
 // --- Data loading ---
