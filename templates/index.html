@@ -218,6 +218,111 @@ body{background:var(--bg);color:var(--fg);font-family:var(--serif);line-height:1
   .kbd-hint{display:none}
 }
 
+/* === Debate Visualizations === */
+.debate-viz{margin-bottom:2rem;padding:1.5rem;background:var(--bg2);border:1px solid var(--border);border-radius:8px}
+.debate-viz h3{font-family:var(--mono);font-size:.8rem;letter-spacing:.08em;text-transform:uppercase;color:var(--fg3);margin-bottom:1rem}
+
+/* Spectrum Bar */
+.spectrum-bar{display:flex;height:36px;border-radius:6px;overflow:hidden;position:relative;cursor:pointer}
+.spectrum-segment{
+  display:flex;align-items:center;justify-content:center;
+  font-family:var(--mono);font-size:.65rem;color:#fff;font-weight:600;
+  transition:flex .8s cubic-bezier(.4,0,.2,1);position:relative;
+  overflow:hidden;white-space:nowrap;
+}
+.spectrum-segment:hover{filter:brightness(1.3);z-index:1}
+.spectrum-segment .seg-label{opacity:0;transition:opacity .3s;position:absolute;font-size:.6rem}
+.spectrum-segment:hover .seg-label{opacity:1}
+
+/* Spectrum tooltip */
+.spectrum-tooltip{
+  position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);
+  background:var(--bg);border:1px solid var(--border);border-radius:4px;
+  padding:.4rem .6rem;font-family:var(--mono);font-size:.7rem;color:var(--fg);
+  white-space:nowrap;pointer-events:none;opacity:0;transition:opacity .2s;z-index:10;
+}
+.spectrum-segment:hover .spectrum-tooltip{opacity:1}
+
+/* Legend */
+.spectrum-legend{display:flex;flex-wrap:wrap;gap:.5rem;margin-top:.5rem}
+.legend-item{
+  display:flex;align-items:center;gap:.3rem;font-family:var(--mono);
+  font-size:.65rem;color:var(--fg2);cursor:pointer;
+}
+.legend-item:hover{color:var(--fg)}
+.legend-dot{width:10px;height:10px;border-radius:2px;flex-shrink:0}
+
+/* Heatmap */
+.heatmap-grid{display:inline-grid;gap:2px;font-family:var(--mono);font-size:.65rem}
+.heatmap-cell{
+  width:36px;height:36px;display:flex;align-items:center;justify-content:center;
+  border-radius:4px;cursor:pointer;transition:transform .15s;position:relative;
+}
+.heatmap-cell:hover{transform:scale(1.15);z-index:1}
+.heatmap-cell.agree{background:rgba(34,197,94,.3);color:var(--green)}
+.heatmap-cell.partial{background:rgba(234,179,8,.2);color:var(--yellow)}
+.heatmap-cell.conflict{background:rgba(239,68,68,.25);color:var(--red)}
+.heatmap-cell.self{background:var(--bg3);color:var(--fg3)}
+.heatmap-header{
+  font-size:.55rem;color:var(--fg3);display:flex;align-items:center;
+  justify-content:center;overflow:hidden;text-overflow:ellipsis;padding:0 2px;
+}
+.heatmap-row-label{
+  font-size:.6rem;color:var(--fg2);display:flex;align-items:center;
+  justify-content:flex-end;padding-right:.4rem;white-space:nowrap;
+}
+.heatmap-tooltip{
+  position:absolute;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);
+  background:var(--bg);border:1px solid var(--border);border-radius:4px;
+  padding:.3rem .5rem;font-size:.6rem;color:var(--fg);white-space:nowrap;
+  pointer-events:none;opacity:0;transition:opacity .2s;z-index:10;
+}
+.heatmap-cell:hover .heatmap-tooltip{opacity:1}
+
+/* Truth Gauge */
+.truth-gauge{position:relative;height:32px;background:var(--bg3);border-radius:16px;overflow:hidden;margin:.5rem 0}
+.truth-gauge-fill{
+  position:absolute;top:0;left:0;height:100%;border-radius:16px;
+  background:linear-gradient(90deg, var(--red) 0%, var(--yellow) 50%, var(--green) 100%);
+  opacity:.3;width:100%;
+}
+.truth-gauge-marker{
+  position:absolute;top:2px;width:28px;height:28px;border-radius:50%;
+  background:var(--fg);border:3px solid var(--accent);
+  transition:left .8s cubic-bezier(.4,0,.2,1);
+  display:flex;align-items:center;justify-content:center;
+  font-family:var(--mono);font-size:.6rem;font-weight:700;color:var(--bg);
+}
+.truth-labels{display:flex;justify-content:space-between;font-family:var(--mono);font-size:.6rem;color:var(--fg3);margin-top:.3rem}
+
+/* Radar Chart */
+.radar-container{position:relative;width:280px;height:280px;margin:0 auto}
+.radar-container svg{width:100%;height:100%}
+.radar-axis-label{
+  font-family:var(--mono);font-size:.55rem;fill:var(--fg3);
+  text-anchor:middle;dominant-baseline:middle;
+}
+.radar-polygon{
+  fill-opacity:.15;stroke-width:1.5;transition:all .3s;cursor:pointer;
+}
+.radar-polygon:hover{fill-opacity:.3;stroke-width:2.5}
+.radar-dot{r:3;transition:r .2s}
+.radar-dot:hover{r:5}
+
+/* Animations */
+@keyframes growIn{from{flex:0}to{flex:var(--target-flex)}}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.debate-viz{animation:fadeIn .4s ease}
+
+/* Responsive */
+@media(max-width:768px){
+  .heatmap-grid{font-size:.5rem}
+  .heatmap-cell{width:28px;height:28px}
+  .radar-container{width:220px;height:220px}
+  .spectrum-bar{height:28px}
+  .debate-viz{padding:1rem}
+}
+
 /* Print */
 @media print{
   .header,.map-panel,.toc-col,.map-toggle,.log-btn,.tab-bar,.date-picker{display:none!important}
@@ -461,7 +566,7 @@ function buildTabs() {
   });
 }
 
-function selectReport(slug) {
+async function selectReport(slug) {
   currentSlug = slug;
   // Update tabs
   document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.slug === slug));
@@ -482,7 +587,18 @@ function selectReport(slug) {
     });
     html += '</span>';
   }
-  html += `</div><div class="report">${r.html}</div>`;
+  html += `</div>`;
+
+  // Debate visualizations (injected before report text)
+  let vizHtml = '';
+  if (r.isDebate) {
+    const debates = await loadDebateData(currentDate);
+    if (debates[slug]) {
+      vizHtml = renderDebateViz(debates[slug]);
+    }
+  }
+
+  html += vizHtml + `<div class="report">${r.html}</div>`;
 
   const content = document.getElementById('content');
   content.innerHTML = html;
@@ -601,6 +717,158 @@ function esc(s) {
 function formatDate(d) {
   const dt = new Date(d + 'T00:00:00');
   return dt.toLocaleDateString('en-US', {weekday:'long', year:'numeric', month:'long', day:'numeric'});
+}
+
+// === Debate Visualizations ===
+let debateCache = {};
+
+async function loadDebateData(date) {
+  if (debateCache[date]) return debateCache[date];
+  const res = await fetch(`/api/debate-data/${date}`);
+  const data = await res.json();
+  debateCache[date] = data;
+  return data;
+}
+
+function buildSpectrumBar(scores, colors) {
+  const total = Object.values(scores).reduce((a,b) => a+b, 0) || 1;
+  let html = '<div class="spectrum-bar">';
+  const sorted = Object.entries(scores).sort((a,b) => b[1] - a[1]);
+  sorted.forEach(([p, score]) => {
+    const pct = (score / total * 100).toFixed(1);
+    const color = colors[p] || '#888';
+    html += `<div class="spectrum-segment" style="flex:${score};background:${color};--target-flex:${score}" data-perspective="${p}" onclick="scrollToDebateSection('${p}')">
+      ${score}
+      <div class="spectrum-tooltip">${p.charAt(0).toUpperCase()+p.slice(1)}: ${score}/100 (${pct}%)</div>
+    </div>`;
+  });
+  html += '</div><div class="spectrum-legend">';
+  sorted.forEach(([p, score]) => {
+    const color = colors[p] || '#888';
+    html += `<span class="legend-item" onclick="scrollToDebateSection('${p}')"><span class="legend-dot" style="background:${color}"></span>${p} ${score}</span>`;
+  });
+  html += '</div>';
+  return html;
+}
+
+function buildHeatmap(agreement, perspectives, colors) {
+  const n = perspectives.length;
+  const icons = {agree:'🟢', partial:'🟡', conflict:'🔴'};
+  const labels = {agree:'Agree', partial:'Partial overlap', conflict:'Direct conflict'};
+  let html = `<div class="heatmap-grid" style="grid-template-columns:80px repeat(${n}, 36px)">`;
+  // Header row
+  html += '<div></div>';
+  perspectives.forEach(p => {
+    const c = colors[p] || '#888';
+    html += `<div class="heatmap-header" style="color:${c}">${p.slice(0,4)}</div>`;
+  });
+  // Data rows
+  perspectives.forEach((row, i) => {
+    const c = colors[row] || '#888';
+    html += `<div class="heatmap-row-label" style="color:${c}">${row}</div>`;
+    perspectives.forEach((col, j) => {
+      if (i === j) {
+        html += '<div class="heatmap-cell self">—</div>';
+      } else {
+        const key1 = `${row}-${col}`, key2 = `${col}-${row}`;
+        const val = agreement[key1] || agreement[key2] || 'partial';
+        html += `<div class="heatmap-cell ${val}">${icons[val]}<div class="heatmap-tooltip">${row} ↔ ${col}: ${labels[val]}</div></div>`;
+      }
+    });
+  });
+  html += '</div>';
+  return html;
+}
+
+function buildTruthGauge(truth) {
+  const pos = truth.position || 50;
+  const left = truth.left_label || 'Mainstream';
+  const right = truth.right_label || 'Counter-narrative';
+  return `<div class="truth-gauge">
+    <div class="truth-gauge-fill"></div>
+    <div class="truth-gauge-marker" style="left:calc(${pos}% - 14px)">${pos}</div>
+  </div>
+  <div class="truth-labels"><span>${left}</span><span>${right}</span></div>`;
+}
+
+function buildRadarChart(divergence, colors) {
+  const dims = Object.keys(divergence);
+  if (dims.length === 0) return '';
+  const cx = 140, cy = 140, r = 110;
+  const dimLabels = {aggressor:"Who's the aggressor?", cause:"What caused this?", solution:"What should happen?", beneficiary:"Who benefits?"};
+
+  // Get all perspectives from first dimension
+  const perspectives = Object.keys(divergence[dims[0]] || {});
+  const n = dims.length;
+
+  let svg = `<svg viewBox="0 0 280 280">`;
+  // Grid rings
+  for (let ring = 1; ring <= 4; ring++) {
+    const rr = r * ring / 4;
+    let points = dims.map((_, i) => {
+      const angle = (Math.PI * 2 * i / n) - Math.PI/2;
+      return `${cx + rr * Math.cos(angle)},${cy + rr * Math.sin(angle)}`;
+    }).join(' ');
+    svg += `<polygon points="${points}" fill="none" stroke="var(--border)" stroke-width="0.5"/>`;
+  }
+  // Axes
+  dims.forEach((d, i) => {
+    const angle = (Math.PI * 2 * i / n) - Math.PI/2;
+    const x = cx + r * Math.cos(angle), y = cy + r * Math.sin(angle);
+    svg += `<line x1="${cx}" y1="${cy}" x2="${x}" y2="${y}" stroke="var(--border)" stroke-width="0.5"/>`;
+    const lx = cx + (r + 20) * Math.cos(angle), ly = cy + (r + 20) * Math.sin(angle);
+    svg += `<text x="${lx}" y="${ly}" class="radar-axis-label">${dimLabels[d] || d}</text>`;
+  });
+  // Perspective polygons
+  perspectives.forEach(p => {
+    const color = colors[p] || '#888';
+    let points = dims.map((d, i) => {
+      const val = (divergence[d]?.[p] || 0) / 100;
+      const angle = (Math.PI * 2 * i / n) - Math.PI/2;
+      return `${cx + r * val * Math.cos(angle)},${cy + r * val * Math.sin(angle)}`;
+    }).join(' ');
+    svg += `<polygon points="${points}" class="radar-polygon" fill="${color}" stroke="${color}" onclick="scrollToDebateSection('${p}')"/>`;
+    // Dots
+    dims.forEach((d, i) => {
+      const val = (divergence[d]?.[p] || 0) / 100;
+      const angle = (Math.PI * 2 * i / n) - Math.PI/2;
+      const dx = cx + r * val * Math.cos(angle), dy = cy + r * val * Math.sin(angle);
+      svg += `<circle cx="${dx}" cy="${dy}" class="radar-dot" fill="${color}"><title>${p}: ${divergence[d]?.[p] || 0}</title></circle>`;
+    });
+  });
+  svg += '</svg>';
+  return `<div class="radar-container">${svg}</div>`;
+}
+
+function renderDebateViz(debateData) {
+  const {scores, divergence, agreement, truth, perspectives, colors} = debateData;
+  let html = '';
+
+  if (Object.keys(scores).length > 0) {
+    html += `<div class="debate-viz"><h3>📊 Narrative Spectrum — Evidence Scores</h3>${buildSpectrumBar(scores, colors)}</div>`;
+  }
+  if (Object.keys(divergence).length > 0) {
+    html += `<div class="debate-viz"><h3>🕸 Narrative Divergence Radar</h3>${buildRadarChart(divergence, colors)}</div>`;
+  }
+  if (Object.keys(agreement).length > 0) {
+    html += `<div class="debate-viz"><h3>🔥 Agreement / Conflict Heatmap</h3>${buildHeatmap(agreement, perspectives, colors)}</div>`;
+  }
+  if (Object.keys(truth).length > 0) {
+    html += `<div class="debate-viz"><h3>⚖️ Truth Landscape</h3>${buildTruthGauge(truth)}</div>`;
+  }
+  return html;
+}
+
+function scrollToDebateSection(perspective) {
+  const h2s = document.querySelectorAll('.report h2');
+  for (const h2 of h2s) {
+    if (h2.textContent.toLowerCase().includes(perspective.toLowerCase())) {
+      const header = h2.closest('.section-header');
+      if (header && header.classList.contains('collapsed')) header.click();
+      setTimeout(() => h2.scrollIntoView({behavior:'smooth', block:'start'}), 100);
+      return;
+    }
+  }
 }
 
 // Init
