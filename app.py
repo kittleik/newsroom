@@ -327,6 +327,53 @@ def parse_debate_data(text):
                 except ValueError:
                     data["truth"][key] = val
 
+    # Fallback: parse scores from natural format (### Heading ... **Evidence Score: XX/100**)
+    if not data["scores"]:
+        perspective_map = {
+            "western establishment": "western",
+            "western critical": "critical",
+            "russian": "russian",
+            "chinese": "chinese",
+            "israeli": "israeli",
+            "arab": "arab",
+            "sunni": "arab",
+            "iranian": "iranian",
+            "shia": "iranian",
+            "global south": "global south",
+        }
+        current_perspective = None
+        for line in text.splitlines():
+            h3 = re.match(r'^###\s+(.+)', line)
+            if h3:
+                heading = re.sub(r'[🇺🇸🇬🇧🇫🇷🇷🇺🇨🇳🇮🇱🇸🇦🇶🇦🇮🇷🌍📰\U0001F1E0-\U0001F1FF]', '', h3.group(1)).strip().lower()
+                current_perspective = None
+                for key, val in perspective_map.items():
+                    if key in heading:
+                        current_perspective = val
+                        break
+            score_m = re.match(r'\*\*Evidence Score:\s*(\d+)/100\*\*', line.strip())
+            if score_m and current_perspective:
+                data["scores"][current_perspective] = int(score_m.group(1))
+
+    # Auto-generate agreement matrix from score proximity if not provided
+    if not data["agreement"] and len(data["scores"]) >= 2:
+        perspectives = list(data["scores"].keys())
+        for i, a in enumerate(perspectives):
+            for b in perspectives[i+1:]:
+                diff = abs(data["scores"][a] - data["scores"][b])
+                if diff <= 10:
+                    val = "agree"
+                elif diff <= 25:
+                    val = "partial"
+                else:
+                    val = "conflict"
+                data["agreement"][f"{a}-{b}"] = val
+
+    # Auto-generate truth position from mean score if not provided
+    if not data["truth"] and data["scores"]:
+        avg = sum(data["scores"].values()) / len(data["scores"])
+        data["truth"] = {"position": round(avg), "left_label": "Strong Evidence", "right_label": "Weak Evidence"}
+
     # Filter perspectives to only those with scores
     data["perspectives"] = [p for p in PERSPECTIVE_COLORS if p in data["scores"]]
     data["colors"] = {p: PERSPECTIVE_COLORS[p] for p in data["perspectives"]}
