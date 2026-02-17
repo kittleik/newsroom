@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Newsroom — Intelligence Dashboard</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0d0f11;--bg2:#13161a;--bg3:#1a1e24;--bg4:#222830;
+  --fg:#d4d4d8;--fg2:#a1a1aa;--fg3:#71717a;
+  --accent:#3b82f6;--accent2:#60a5fa;
+  --green:#22c55e;--yellow:#eab308;--red:#ef4444;
+  --border:#27272a;
+  --serif:'Georgia','Times New Roman',serif;
+  --mono:'SF Mono','Cascadia Code','Consolas',monospace;
+  --sans:-apple-system,'Segoe UI','Helvetica Neue',sans-serif;
+  --sidebar-w:260px;
+}
+html{font-size:16px;-webkit-font-smoothing:antialiased}
+body{background:var(--bg);color:var(--fg);font-family:var(--serif);line-height:1.7;display:flex;min-height:100vh}
+
+/* Sidebar */
+.sidebar{
+  width:var(--sidebar-w);min-width:var(--sidebar-w);background:var(--bg2);
+  border-right:1px solid var(--border);display:flex;flex-direction:column;
+  position:fixed;top:0;left:0;bottom:0;z-index:10;transition:transform .2s ease;
+}
+.sidebar-header{
+  padding:1.25rem 1rem .75rem;border-bottom:1px solid var(--border);
+  font-family:var(--mono);font-size:.75rem;letter-spacing:.08em;
+  text-transform:uppercase;color:var(--fg3);
+}
+.sidebar-header h1{font-size:1rem;letter-spacing:.12em;color:var(--fg);margin-bottom:.15rem;text-transform:uppercase}
+.date-list{flex:1;overflow-y:auto;padding:.5rem 0}
+.date-item{
+  display:block;width:100%;text-align:left;background:none;border:none;
+  padding:.55rem 1rem;font-family:var(--mono);font-size:.85rem;
+  color:var(--fg2);cursor:pointer;transition:all .1s;
+}
+.date-item:hover{background:var(--bg3);color:var(--fg)}
+.date-item.active{background:var(--bg4);color:var(--accent2);border-left:2px solid var(--accent)}
+
+/* Main */
+.main{margin-left:var(--sidebar-w);flex:1;min-width:0}
+.topbar{
+  position:sticky;top:0;z-index:5;background:var(--bg);
+  border-bottom:1px solid var(--border);padding:.6rem 2rem;
+  font-family:var(--mono);font-size:.8rem;color:var(--fg3);
+  display:flex;align-items:center;gap:1rem;
+  backdrop-filter:blur(8px);
+}
+.hamburger{display:none;background:none;border:none;color:var(--fg);font-size:1.3rem;cursor:pointer;padding:.2rem .5rem}
+.topbar-spacer{flex:1}
+.map-toggle{
+  background:var(--bg3);border:1px solid var(--border);color:var(--fg2);
+  font-family:var(--mono);font-size:.75rem;padding:.3rem .7rem;border-radius:4px;
+  cursor:pointer;transition:all .15s;letter-spacing:.04em;
+}
+.map-toggle:hover{background:var(--bg4);color:var(--fg)}
+.map-toggle.active{background:rgba(59,130,246,.15);color:var(--accent2);border-color:var(--accent)}
+
+/* Map */
+.map-panel{
+  height:0;overflow:hidden;transition:height .3s ease;
+  border-bottom:1px solid var(--border);position:relative;
+}
+.map-panel.open{height:420px}
+#map{width:100%;height:100%;background:var(--bg2)}
+/* Dark map tiles */
+.leaflet-tile-pane{filter:brightness(0.7) invert(1) contrast(1.1) hue-rotate(200deg) saturate(0.4) brightness(0.8)}
+.leaflet-control-attribution{display:none!important}
+.leaflet-control-zoom a{background:var(--bg3)!important;color:var(--fg)!important;border-color:var(--border)!important}
+
+.content{max-width:52rem;margin:0 auto;padding:1.5rem 2rem 4rem}
+.empty{text-align:center;padding:6rem 2rem;color:var(--fg3);font-family:var(--mono);font-size:.9rem}
+
+/* Categories & reports */
+.category{margin-bottom:2.5rem}
+.category-header{
+  font-family:var(--mono);font-size:.8rem;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--fg3);
+  padding-bottom:.4rem;border-bottom:1px solid var(--border);margin-bottom:1rem;
+}
+.report{margin-bottom:2rem;padding-bottom:1.5rem;border-bottom:1px solid var(--border)}
+.report:last-child{border-bottom:none}
+.report-label{
+  font-family:var(--mono);font-size:.7rem;letter-spacing:.08em;
+  text-transform:uppercase;color:var(--accent);margin-bottom:.75rem;
+  display:inline-block;background:rgba(59,130,246,.1);padding:.15rem .5rem;border-radius:3px;
+}
+
+/* Markdown */
+.report h1{font-family:var(--mono);font-size:1.35rem;color:var(--fg);margin:1.2rem 0 .6rem;line-height:1.3;font-weight:600}
+.report h2{font-family:var(--mono);font-size:1.05rem;color:var(--fg);margin:1.4rem 0 .5rem;line-height:1.35;font-weight:600}
+.report h3{font-family:var(--mono);font-size:.9rem;color:var(--fg2);margin:1rem 0 .4rem;font-weight:600}
+.report h4,.report h5,.report h6{font-family:var(--mono);font-size:.8rem;color:var(--fg2);margin:.8rem 0 .3rem;font-weight:600}
+.report p{margin:.5rem 0;color:var(--fg)}
+.report ul,.report ol{margin:.5rem 0 .5rem 1.5rem;color:var(--fg)}
+.report li{margin:.25rem 0}
+.report strong{color:#e4e4e7;font-weight:600}
+.report em{color:var(--fg2);font-style:italic}
+.report blockquote{
+  border-left:3px solid var(--accent);margin:.8rem 0;padding:.3rem .8rem .3rem 1rem;
+  color:var(--fg2);background:var(--bg2);border-radius:0 4px 4px 0;
+}
+.report hr{border:none;border-top:1px solid var(--border);margin:1.5rem 0}
+.report a{color:var(--accent2);text-decoration:underline;text-underline-offset:2px;transition:color .1s}
+.report a:hover{color:#93c5fd}
+.report code{font-family:var(--mono);font-size:.85em;background:var(--bg3);padding:.1em .35em;border-radius:3px;color:#e4e4e7}
+.report pre{background:var(--bg2);border:1px solid var(--border);border-radius:4px;padding:.8rem 1rem;overflow-x:auto;margin:.8rem 0}
+.report pre code{background:none;padding:0}
+.report table{width:100%;border-collapse:collapse;margin:.8rem 0;font-size:.9rem}
+.report th,.report td{padding:.4rem .6rem;border:1px solid var(--border);text-align:left}
+.report th{background:var(--bg3);font-family:var(--mono);font-size:.8rem;font-weight:600}
+
+/* Trust badges */
+.badge{
+  display:inline-block;font-family:var(--mono);font-size:.65rem;font-weight:700;
+  letter-spacing:.05em;padding:.1rem .4rem;border-radius:3px;
+  vertical-align:middle;margin:0 .15rem;white-space:nowrap;
+}
+.badge-high{background:rgba(34,197,94,.15);color:var(--green);border:1px solid rgba(34,197,94,.3)}
+.badge-med{background:rgba(234,179,8,.12);color:var(--yellow);border:1px solid rgba(234,179,8,.25)}
+.badge-state{background:rgba(239,68,68,.12);color:var(--red);border:1px solid rgba(239,68,68,.25)}
+
+/* Map popup */
+.marker-popup{font-family:var(--sans);font-size:.8rem;line-height:1.4;max-width:240px}
+.marker-popup .mp-label{font-family:var(--mono);font-size:.65rem;text-transform:uppercase;letter-spacing:.05em;opacity:.6;margin-bottom:2px}
+.marker-popup .mp-headline{font-weight:600;margin-bottom:3px}
+.marker-popup .mp-country{font-size:.7rem;opacity:.5}
+.marker-popup .mp-trust{font-size:.65rem;font-family:var(--mono);font-weight:700;margin-top:3px}
+.marker-popup .mp-trust.t-high{color:var(--green)}
+.marker-popup .mp-trust.t-med{color:var(--yellow)}
+.marker-popup .mp-trust.t-state{color:var(--red)}
+
+/* Map marker count badge */
+.map-count{
+  display:inline-block;background:var(--bg4);color:var(--fg2);
+  font-family:var(--mono);font-size:.65rem;padding:.1rem .35rem;
+  border-radius:3px;margin-left:.4rem;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar{width:6px}
+::-webkit-scrollbar-track{background:var(--bg)}
+::-webkit-scrollbar-thumb{background:var(--bg4);border-radius:3px}
+
+/* Mobile */
+@media(max-width:768px){
+  .sidebar{transform:translateX(-100%)}
+  .sidebar.open{transform:translateX(0)}
+  .main{margin-left:0}
+  .hamburger{display:block}
+  .content{padding:1rem}
+  .overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9;display:none}
+  .overlay.show{display:block}
+  .map-panel.open{height:300px}
+}
+</style>
+</head>
+<body>
+<div class="overlay" id="overlay" onclick="toggleSidebar()"></div>
+<nav class="sidebar" id="sidebar">
+  <div class="sidebar-header">
+    <h1>Newsroom</h1>
+    Intelligence Reports
+  </div>
+  <div class="date-list" id="dateList"></div>
+</nav>
+<div class="main">
+  <div class="topbar">
+    <button class="hamburger" onclick="toggleSidebar()">☰</button>
+    <span id="topbarDate">Select a date</span>
+    <div class="topbar-spacer"></div>
+    <button class="map-toggle" id="mapToggle" onclick="toggleMap()">🗺 MAP<span class="map-count" id="mapCount">0</span></button>
+  </div>
+  <div class="map-panel" id="mapPanel">
+    <div id="map"></div>
+  </div>
+  <div id="mapPanel"><div id="map"></div></div>
+  <div class="content" id="content">
+    <div class="empty">Select a date from the sidebar to view reports.</div>
+  </div>
+</div>
+<script>
+let currentDate = null;
+let map = null;
+let markerLayer = null;
+let mapOpen = false;
+
+function initMap() {
+  map = L.map('map', {
+    center: [30, 20],
+    zoom: 2,
+    zoomControl: true,
+    attributionControl: false,
+  });
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 12,
+  }).addTo(map);
+  markerLayer = L.layerGroup().addTo(map);
+}
+
+function toggleMap() {
+  const panel = document.getElementById('mapPanel');
+  const btn = document.getElementById('mapToggle');
+  mapOpen = !mapOpen;
+  panel.classList.toggle('open', mapOpen);
+  btn.classList.toggle('active', mapOpen);
+  if (mapOpen && map) {
+    setTimeout(() => map.invalidateSize(), 320);
+  }
+}
+
+const TRUST_COLORS = { high: '#22c55e', med: '#eab308', state: '#ef4444' };
+const TRUST_LABELS = { high: '🟢 HIGH', med: '🟡 MED', state: '🔴 STATE' };
+
+function plotMarkers(markers) {
+  if (!markerLayer) return;
+  markerLayer.clearLayers();
+  document.getElementById('mapCount').textContent = markers.length;
+
+  markers.forEach(m => {
+    const color = TRUST_COLORS[m.trust] || TRUST_COLORS.high;
+    const icon = L.divIcon({
+      className: '',
+      html: `<svg width="14" height="14" viewBox="0 0 14 14"><circle cx="7" cy="7" r="6" fill="${color}" fill-opacity="0.7" stroke="${color}" stroke-width="1.5" stroke-opacity="0.9"/><circle cx="7" cy="7" r="2.5" fill="#fff" fill-opacity="0.9"/></svg>`,
+      iconSize: [14, 14],
+      iconAnchor: [7, 7],
+      popupAnchor: [0, -10],
+    });
+
+    const popup = `<div class="marker-popup">
+      <div class="mp-label">${esc(m.label)}</div>
+      <div class="mp-headline">${esc(m.headline)}</div>
+      <div class="mp-country">${esc(m.country)}</div>
+      <div class="mp-trust t-${m.trust}">${TRUST_LABELS[m.trust]}</div>
+    </div>`;
+
+    L.marker([m.lat, m.lng], { icon }).bindPopup(popup).addTo(markerLayer);
+  });
+
+  // Fit bounds if we have markers
+  if (markers.length > 0 && mapOpen) {
+    const bounds = L.latLngBounds(markers.map(m => [m.lat, m.lng]));
+    map.fitBounds(bounds, { padding: [40, 40], maxZoom: 5 });
+  }
+}
+
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+async function loadDates() {
+  const res = await fetch('/api/dates');
+  const dates = await res.json();
+  const list = document.getElementById('dateList');
+  list.innerHTML = '';
+  dates.forEach(d => {
+    const btn = document.createElement('button');
+    btn.className = 'date-item';
+    btn.textContent = d;
+    btn.onclick = () => selectDate(d);
+    list.appendChild(btn);
+  });
+  if (dates.length > 0) selectDate(dates[0]);
+}
+
+async function selectDate(date) {
+  currentDate = date;
+  document.querySelectorAll('.date-item').forEach(el => {
+    el.classList.toggle('active', el.textContent === date);
+  });
+  document.getElementById('topbarDate').textContent = formatDate(date);
+
+  const res = await fetch(`/api/reports/${date}`);
+  const data = await res.json();
+  const groups = data.groups || [];
+  const markers = data.markers || [];
+  const content = document.getElementById('content');
+
+  plotMarkers(markers);
+
+  if (!groups.length) {
+    content.innerHTML = '<div class="empty">No reports for this date.</div>';
+    return;
+  }
+
+  let html = '';
+  groups.forEach(g => {
+    html += `<div class="category"><div class="category-header">${g.category}</div>`;
+    g.reports.forEach(r => {
+      html += `<div class="report"><div class="report-label">${r.label}</div>${r.html}</div>`;
+    });
+    html += '</div>';
+  });
+  content.innerHTML = html;
+  content.scrollTop = 0;
+
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('overlay').classList.remove('show');
+}
+
+function formatDate(d) {
+  const dt = new Date(d + 'T00:00:00');
+  return dt.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+}
+
+function toggleSidebar() {
+  document.getElementById('sidebar').classList.toggle('open');
+  document.getElementById('overlay').classList.toggle('show');
+}
+
+initMap();
+loadDates();
+</script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+<script>
+// === Map ===
+let map = null, mapLoaded = false, clusterGroup = null;
+
+function toggleMap() {
+  const panel = document.getElementById('mapPanel');
+  const btn = document.getElementById('mapToggle');
+  const showing = panel.classList.toggle('show');
+  btn.classList.toggle('active', showing);
+  if (showing && !mapLoaded) initMap();
+  if (showing && map) setTimeout(() => map.invalidateSize(), 100);
+}
+
+function initMap() {
+  mapLoaded = true;
+  map = L.map('map', {zoomControl:true}).setView([30, 20], 2);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    attribution:'©OpenStreetMap ©CARTO', maxZoom:18
+  }).addTo(map);
+  loadMapData();
+}
+
+const TRUST_COLORS = {high:'#22c55e', med:'#eab308', state:'#ef4444'};
+
+function makeIcon(trust) {
+  const c = TRUST_COLORS[trust] || TRUST_COLORS.high;
+  return L.divIcon({
+    className:'',
+    html:`<div style="width:14px;height:14px;border-radius:50%;background:${c};border:2px solid #fff;box-shadow:0 0 4px ${c}"></div>`,
+    iconSize:[14,14], iconAnchor:[7,7]
+  });
+}
+
+async function loadMapData() {
+  const res = await fetch('/api/map-data');
+  const data = await res.json();
+  if (clusterGroup) map.removeLayer(clusterGroup);
+  clusterGroup = L.markerClusterGroup({maxClusterRadius:40});
+  data.forEach(d => {
+    const trustLabels = {high:'🟢 HIGH', med:'🟡 MED', state:'🔴 STATE'};
+    const trustClasses = {high:'popup-trust-high', med:'popup-trust-med', state:'popup-trust-state'};
+    let popup = `<h4>${d.country}</h4><ul>`;
+    d.headlines.forEach(h => {
+      const tc = trustClasses[h.trust]||'popup-trust-high';
+      const tl = trustLabels[h.trust]||'🟢 HIGH';
+      popup += `<li><span class="popup-trust ${tc}">${tl}</span> ${h.title} <em style="color:#888">(${h.section})</em></li>`;
+    });
+    popup += '</ul>';
+    const marker = L.marker([d.lat, d.lng], {icon: makeIcon(d.trust)}).bindPopup(popup, {maxWidth:300});
+    clusterGroup.addLayer(marker);
+  });
+  map.addLayer(clusterGroup);
+}
+</script>
+</body>
+</html>
