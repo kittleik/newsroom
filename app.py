@@ -27,6 +27,17 @@ CATEGORY_MAP = {
     "tech-crypto": ("💻 Tech", 2),
 }
 
+PERSPECTIVE_COLORS = {
+    "western": "#3b82f6",
+    "russian": "#ef4444",
+    "chinese": "#f97316",
+    "israeli": "#14b8a6",
+    "arab": "#22c55e",
+    "iranian": "#a855f7",
+    "critical": "#06b6d4",
+    "global south": "#eab308",
+}
+
 SLUG_LABELS = {
     "world": "🌍 World",
     "europe": "📰 Europe",
@@ -264,6 +275,132 @@ def parse_source_diversity(text):
     return scores
 
 
+def is_debate_report(slug):
+    return "debate" in slug
+
+
+def parse_debate_data(text):
+    """Parse debate metadata from markdown comments."""
+    data = {"scores": {}, "divergence": {}, "agreement": {}, "truth": {}, "perspectives": list(PERSPECTIVE_COLORS.keys())}
+
+    # Parse scores
+    scores_match = re.search(r'<!-- DEBATE_SCORES\n(.*?)\n-->', text, re.DOTALL)
+    if scores_match:
+        for line in scores_match.group(1).strip().splitlines():
+            m = re.match(r'(\w[\w\s]*?):\s*(\d+)', line.strip())
+            if m:
+                data["scores"][m.group(1).strip().lower()] = int(m.group(2))
+
+    # Parse divergence dimensions
+    div_match = re.search(r'<!-- DEBATE_DIVERGENCE\n(.*?)\n-->', text, re.DOTALL)
+    if div_match:
+        for line in div_match.group(1).strip().splitlines():
+            m = re.match(r'(\w+):\s*(.*)', line.strip())
+            if m:
+                dim_name = m.group(1).strip().lower()
+                vals = {}
+                for pair in m.group(2).split(','):
+                    pm = re.match(r'\s*(\w[\w\s]*?)=(\d+)', pair.strip())
+                    if pm:
+                        vals[pm.group(1).strip().lower()] = int(pm.group(2))
+                data["divergence"][dim_name] = vals
+
+    # Parse agreement matrix
+    agr_match = re.search(r'<!-- DEBATE_AGREEMENT\n(.*?)\n-->', text, re.DOTALL)
+    if agr_match:
+        for line in agr_match.group(1).strip().splitlines():
+            m = re.match(r'([\w\s]+)-([\w\s]+):\s*(\w+)', line.strip())
+            if m:
+                a, b, val = m.group(1).strip().lower(), m.group(2).strip().lower(), m.group(3).strip().lower()
+                data["agreement"][f"{a}-{b}"] = val
+
+    # Parse truth landscape
+    truth_match = re.search(r'<!-- DEBATE_TRUTH\n(.*?)\n-->', text, re.DOTALL)
+    if truth_match:
+        for line in truth_match.group(1).strip().splitlines():
+            m = re.match(r'(\w+):\s*"?([^"]*)"?', line.strip())
+            if m:
+                key = m.group(1).strip()
+                val = m.group(2).strip()
+                try:
+                    data["truth"][key] = int(val)
+                except ValueError:
+                    data["truth"][key] = val
+
+    # Fallback: parse scores from natural format (### Heading ... **Evidence Score: XX/100**)
+    if not data["scores"]:
+        perspective_map = {
+            "western establishment": "western",
+            "western critical": "critical",
+            "russian": "russian",
+            "chinese": "chinese",
+            "israeli": "israeli",
+            "arab": "arab",
+            "sunni": "arab",
+            "iranian": "iranian",
+            "shia": "iranian",
+            "global south": "global south",
+        }
+        current_perspective = None
+        for line in text.splitlines():
+            h3 = re.match(r'^###\s+(.+)', line)
+            if h3:
+                heading = re.sub(r'[🇺🇸🇬🇧🇫🇷🇷🇺🇨🇳🇮🇱🇸🇦🇶🇦🇮🇷🌍📰\U0001F1E0-\U0001F1FF]', '', h3.group(1)).strip().lower()
+                current_perspective = None
+                for key, val in perspective_map.items():
+                    if key in heading:
+                        current_perspective = val
+                        break
+            score_m = re.match(r'\*\*Evidence Score:\s*(\d+)/100\*\*', line.strip())
+            if score_m and current_perspective:
+                data["scores"][current_perspective] = int(score_m.group(1))
+
+    # Auto-generate agreement matrix from score proximity if not provided
+    if not data["agreement"] and len(data["scores"]) >= 2:
+        perspectives = list(data["scores"].keys())
+        for i, a in enumerate(perspectives):
+            for b in perspectives[i+1:]:
+                diff = abs(data["scores"][a] - data["scores"][b])
+                if diff <= 10:
+                    val = "agree"
+                elif diff <= 25:
+                    val = "partial"
+                else:
+                    val = "conflict"
+                data["agreement"][f"{a}-{b}"] = val
+
+    # Auto-generate truth position from mean score if not provided
+    if not data["truth"] and data["scores"]:
+        avg = sum(data["scores"].values()) / len(data["scores"])
+        data["truth"] = {"position": round(avg), "left_label": "Strong Evidence", "right_label": "Weak Evidence"}
+
+    # Filter perspectives to only those with scores
+    data["perspectives"] = [p for p in PERSPECTIVE_COLORS if p in data["scores"]]
+    data["colors"] = {p: PERSPECTIVE_COLORS[p] for p in data["perspectives"]}
+
+    return data
+
+
+@app.route("/api/debate-data/<date>")
+def api_debate_data(date):
+    if not re.match(r"^\d{4}-\d{2}-\d{2}$", date):
+        return jsonify({"error": "bad date"}), 400
+
+    debates = {}
+    if REPORTS_DIR.exists():
+        for f in sorted(REPORTS_DIR.iterdir()):
+            parsed = parse_filename(f.name)
+            if not parsed or parsed[0] != date or not is_debate_report(parsed[1]):
+                continue
+            content = f.read_text(encoding="utf-8")
+            debate = parse_debate_data(content)
+            debate["slug"] = parsed[1]
+            debate["headline"] = extract_headline(content)
+            debates[parsed[1]] = debate
+
+    return jsonify(debates)
+
+
 @app.route("/")
 def index():
     return render_template("index.html")
@@ -296,7 +433,10 @@ def api_reports(date):
             slug = parsed[1]
             content = f.read_text(encoding="utf-8")
             html = render_md(content)
-            label = SLUG_LABELS.get(slug, slug.replace("-", " ").title())
+            if is_debate_report(slug):
+                label = "⚖️ " + extract_headline(content)[:40]
+            else:
+                label = SLUG_LABELS.get(slug, slug.replace("-", " ").title())
             countries = extract_countries_from_text(content)
             headings = extract_headings(content)
             read_time = reading_time_minutes(content)
@@ -304,6 +444,8 @@ def api_reports(date):
             # Check if log file exists
             log_file = REPORTS_DIR / f"{date}-{slug}-log.md"
             has_log = log_file.exists()
+
+            is_debate = is_debate_report(slug)
 
             reports_list.append({
                 "slug": slug,
@@ -313,6 +455,7 @@ def api_reports(date):
                 "headings": headings,
                 "readTime": read_time,
                 "hasLog": has_log,
+                "isDebate": is_debate,
             })
 
             markers = extract_geo_markers(content, slug, label)
