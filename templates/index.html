@@ -17,11 +17,11 @@
   --mono:'SF Mono','Cascadia Code','Consolas',monospace;
   --sans:-apple-system,'Segoe UI','Helvetica Neue',sans-serif;
   --sidebar-w:260px;
+  --map-h:320px;
 }
 html{font-size:16px;-webkit-font-smoothing:antialiased;scroll-behavior:smooth}
 body{background:var(--bg);color:var(--fg);font-family:var(--serif);line-height:1.7;min-height:100vh}
 
-/* Progress bar */
 #progressBar{position:fixed;top:0;left:0;height:3px;background:var(--accent);z-index:200;transition:width 80ms linear;width:0}
 
 /* ===== TOP BAR ===== */
@@ -37,17 +37,6 @@ body{background:var(--bg);color:var(--fg);font-family:var(--serif);line-height:1
   border-radius:4px;cursor:pointer;
 }
 .topbar .spacer{flex:1}
-.topbar .btn{
-  background:var(--bg3);border:1px solid var(--border);color:var(--fg2);
-  font-family:var(--mono);font-size:.72rem;padding:.25rem .6rem;border-radius:4px;
-  cursor:pointer;transition:all .15s;white-space:nowrap;
-}
-.topbar .btn:hover{background:var(--bg4);color:var(--fg)}
-.topbar .btn.active{background:rgba(59,130,246,.15);color:var(--accent2);border-color:var(--accent)}
-.topbar .btn .count{
-  display:inline-block;background:var(--bg4);color:var(--fg2);
-  font-size:.6rem;padding:0 .3rem;border-radius:3px;margin-left:.3rem;
-}
 .menu-btn{display:none;background:none;border:none;color:var(--fg);font-size:1.3rem;cursor:pointer;padding:0 .3rem}
 
 /* ===== SIDEBAR ===== */
@@ -74,12 +63,9 @@ body{background:var(--bg);color:var(--fg);font-family:var(--serif);line-height:1
 .sidebar-item .label{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .sidebar-item .read-time{font-family:var(--mono);font-size:.6rem;color:var(--fg3);flex-shrink:0}
 
-/* Sidebar TOC (within-report headings) */
+/* Sidebar TOC */
 .sidebar-toc{border-top:1px solid var(--border);margin-top:.5rem;padding-top:.5rem}
-.sidebar-toc-title{
-  font-family:var(--mono);font-size:.55rem;letter-spacing:.1em;text-transform:uppercase;
-  color:var(--fg3);padding:.3rem 1rem .2rem;
-}
+.sidebar-toc-title{font-family:var(--mono);font-size:.55rem;letter-spacing:.1em;text-transform:uppercase;color:var(--fg3);padding:.3rem 1rem .2rem}
 .toc-link{
   display:block;font-family:var(--mono);font-size:.68rem;color:var(--fg3);
   text-decoration:none;padding:.15rem 1rem .15rem 1.5rem;
@@ -88,21 +74,34 @@ body{background:var(--bg);color:var(--fg);font-family:var(--serif);line-height:1
 .toc-link:hover{color:var(--fg2);background:var(--bg3)}
 .toc-link.active{color:var(--accent2)}
 
-/* ===== MAIN CONTENT ===== */
-.main{margin-left:var(--sidebar-w);min-height:calc(100vh - 48px)}
+/* ===== MAIN AREA ===== */
+.main{margin-left:var(--sidebar-w);min-height:calc(100vh - 48px);display:flex;flex-direction:column}
 
-/* Map panel */
-.map-panel{height:0;overflow:hidden;transition:height .3s ease;border-bottom:1px solid var(--border)}
-.map-panel.open{height:360px}
+/* Map: always visible, resizable */
+.map-container{
+  height:var(--map-h);min-height:180px;
+  border-bottom:1px solid var(--border);position:relative;flex-shrink:0;
+}
 #map{width:100%;height:100%;background:var(--bg2)}
 .leaflet-tile-pane{filter:brightness(0.7) invert(1) contrast(1.1) hue-rotate(200deg) saturate(0.4) brightness(0.8)}
 .leaflet-control-attribution{display:none!important}
 .leaflet-control-zoom a{background:var(--bg3)!important;color:var(--fg)!important;border-color:var(--border)!important}
+.map-resize{
+  position:absolute;bottom:0;left:0;right:0;height:6px;cursor:ns-resize;z-index:10;
+  background:linear-gradient(transparent,rgba(255,255,255,.05));
+}
+.map-resize:hover{background:linear-gradient(transparent,rgba(59,130,246,.2))}
+.map-badge{
+  position:absolute;top:10px;right:10px;z-index:500;
+  font-family:var(--mono);font-size:.65rem;background:rgba(13,15,17,.85);
+  color:var(--fg2);padding:.2rem .5rem;border-radius:4px;border:1px solid var(--border);
+  pointer-events:none;
+}
 
-/* Content area */
+/* Content */
+.content-scroll{flex:1;overflow-y:auto}
 .content-area{max-width:52rem;margin:0 auto;padding:1.5rem 2rem 4rem}
-
-.empty{text-align:center;padding:6rem 2rem;color:var(--fg3);font-family:var(--mono);font-size:.9rem}
+.empty{text-align:center;padding:4rem 2rem;color:var(--fg3);font-family:var(--mono);font-size:.9rem}
 
 /* Report header */
 .report-header{margin-bottom:1.5rem;padding-bottom:1rem;border-bottom:1px solid var(--border)}
@@ -115,8 +114,6 @@ body{background:var(--bg);color:var(--fg);font-family:var(--serif);line-height:1
   padding:.2rem .5rem;border-radius:3px;transition:all .15s;
 }
 .log-btn:hover{background:rgba(59,130,246,.18)}
-
-/* Country tags */
 .country-tags{display:flex;flex-wrap:wrap;gap:.25rem;margin-top:.5rem}
 .country-tag{
   display:inline-block;font-family:var(--mono);font-size:.58rem;
@@ -128,10 +125,7 @@ body{background:var(--bg);color:var(--fg);font-family:var(--serif);line-height:1
 @keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.1)}}
 
 /* Collapsible sections */
-.section-header{
-  display:flex;align-items:center;cursor:pointer;user-select:none;
-  padding:.3rem 0;margin:1.4rem 0 .5rem;
-}
+.section-header{display:flex;align-items:center;cursor:pointer;user-select:none;padding:.3rem 0;margin:1.4rem 0 .5rem}
 .section-header:hover{opacity:.85}
 .section-chevron{font-size:.7rem;color:var(--fg3);margin-right:.5rem;transition:transform .2s;flex-shrink:0}
 .section-header.collapsed .section-chevron{transform:rotate(-90deg)}
@@ -148,10 +142,7 @@ body{background:var(--bg);color:var(--fg);font-family:var(--serif);line-height:1
 .report li{margin:.25rem 0}
 .report strong{color:#e4e4e7;font-weight:600}
 .report em{color:var(--fg2);font-style:italic}
-.report blockquote{
-  border-left:3px solid var(--accent);margin:.8rem 0;padding:.5rem 1rem;
-  color:var(--fg2);background:var(--bg2);border-radius:0 4px 4px 0;font-style:italic;
-}
+.report blockquote{border-left:3px solid var(--accent);margin:.8rem 0;padding:.5rem 1rem;color:var(--fg2);background:var(--bg2);border-radius:0 4px 4px 0;font-style:italic}
 .report hr{border:none;border-top:1px solid var(--border);margin:1.5rem 0}
 .report a{color:var(--accent2);text-decoration:none;border-bottom:1px solid transparent;transition:all .15s}
 .report a:hover{color:#93c5fd;border-bottom-color:var(--accent2)}
@@ -171,26 +162,26 @@ body{background:var(--bg);color:var(--fg);font-family:var(--serif);line-height:1
 .badge-state{background:rgba(239,68,68,.12);color:var(--red);border:1px solid rgba(239,68,68,.25)}
 
 /* Map popup */
-.marker-popup{font-family:var(--sans);font-size:.8rem;line-height:1.4;max-width:260px}
+.marker-popup{font-family:var(--sans);font-size:.8rem;line-height:1.4;max-width:280px}
 .marker-popup h4{margin:0 0 4px;font-size:.9rem}
-.marker-popup ul{margin:0;padding-left:1rem}
-.marker-popup li{margin:2px 0;font-size:.75rem}
+.marker-popup .popup-section{font-size:.7rem;color:var(--accent2);margin-bottom:2px}
+.marker-popup .popup-headline{font-size:.75rem;color:var(--fg2);margin:2px 0}
+.marker-popup .popup-link{font-size:.7rem;color:var(--accent2);cursor:pointer;text-decoration:underline;margin-top:4px;display:inline-block}
 .marker-popup .mp-trust{font-family:var(--mono);font-size:.6rem;font-weight:700}
 .popup-trust-high{color:var(--green)}.popup-trust-med{color:var(--yellow)}.popup-trust-state{color:var(--red)}
 
 .country-mention-highlight{background:rgba(59,130,246,.15);border-radius:3px;animation:highlightFade 2s ease forwards}
 @keyframes highlightFade{0%{background:rgba(59,130,246,.35)}70%{background:rgba(59,130,246,.15)}100%{background:transparent}}
 
-/* Scrollbar */
 ::-webkit-scrollbar{width:6px}
 ::-webkit-scrollbar-track{background:var(--bg)}
 ::-webkit-scrollbar-thumb{background:var(--bg4);border-radius:3px}
 
-/* === Debate Visualizations === */
+/* Debate viz */
 .debate-viz{margin-bottom:2rem;padding:1.5rem;background:var(--bg2);border:1px solid var(--border);border-radius:8px}
 .debate-viz h3{font-family:var(--mono);font-size:.8rem;letter-spacing:.08em;text-transform:uppercase;color:var(--fg3);margin-bottom:1rem}
-.spectrum-bar{display:flex;height:36px;border-radius:6px;overflow:hidden;position:relative;cursor:pointer}
-.spectrum-segment{display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:.65rem;color:#fff;font-weight:600;transition:flex .8s cubic-bezier(.4,0,.2,1);position:relative;overflow:hidden;white-space:nowrap}
+.spectrum-bar{display:flex;height:36px;border-radius:6px;overflow:hidden;cursor:pointer}
+.spectrum-segment{display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:.65rem;color:#fff;font-weight:600;transition:flex .8s;position:relative;overflow:hidden}
 .spectrum-segment:hover{filter:brightness(1.3);z-index:1}
 .spectrum-tooltip{position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:.4rem .6rem;font-family:var(--mono);font-size:.7rem;color:var(--fg);white-space:nowrap;pointer-events:none;opacity:0;transition:opacity .2s;z-index:10}
 .spectrum-segment:hover .spectrum-tooltip{opacity:1}
@@ -204,13 +195,13 @@ body{background:var(--bg);color:var(--fg);font-family:var(--serif);line-height:1
 .heatmap-cell.partial{background:rgba(234,179,8,.2);color:var(--yellow)}
 .heatmap-cell.conflict{background:rgba(239,68,68,.25);color:var(--red)}
 .heatmap-cell.self{background:var(--bg3);color:var(--fg3)}
-.heatmap-header{font-size:.55rem;color:var(--fg3);display:flex;align-items:center;justify-content:center;overflow:hidden;text-overflow:ellipsis;padding:0 2px}
+.heatmap-header{font-size:.55rem;color:var(--fg3);display:flex;align-items:center;justify-content:center}
 .heatmap-row-label{font-size:.6rem;color:var(--fg2);display:flex;align-items:center;justify-content:flex-end;padding-right:.4rem;white-space:nowrap}
 .heatmap-tooltip{position:absolute;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:.3rem .5rem;font-size:.6rem;color:var(--fg);white-space:nowrap;pointer-events:none;opacity:0;transition:opacity .2s;z-index:10}
 .heatmap-cell:hover .heatmap-tooltip{opacity:1}
 .truth-gauge{position:relative;height:32px;background:var(--bg3);border-radius:16px;overflow:hidden;margin:.5rem 0}
 .truth-gauge-fill{position:absolute;top:0;left:0;height:100%;border-radius:16px;background:linear-gradient(90deg,var(--red) 0%,var(--yellow) 50%,var(--green) 100%);opacity:.3;width:100%}
-.truth-gauge-marker{position:absolute;top:2px;width:28px;height:28px;border-radius:50%;background:var(--fg);border:3px solid var(--accent);transition:left .8s cubic-bezier(.4,0,.2,1);display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:.6rem;font-weight:700;color:var(--bg)}
+.truth-gauge-marker{position:absolute;top:2px;width:28px;height:28px;border-radius:50%;background:var(--fg);border:3px solid var(--accent);transition:left .8s;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:.6rem;font-weight:700;color:var(--bg)}
 .truth-labels{display:flex;justify-content:space-between;font-family:var(--mono);font-size:.6rem;color:var(--fg3);margin-top:.3rem}
 .radar-container{position:relative;width:280px;height:280px;margin:0 auto}
 .radar-container svg{width:100%;height:100%}
@@ -229,12 +220,10 @@ body{background:var(--bg);color:var(--fg);font-family:var(--serif);line-height:1
   .main{margin-left:0}
   .content-area{padding:1rem .75rem 3rem}
   .menu-btn{display:block}
-  .map-panel.open{height:260px}
+  .map-container{height:220px;min-height:140px}
 }
-
-/* Print */
 @media print{
-  .topbar,.sidebar,.sidebar-overlay,.map-panel,.log-btn,.country-tag{display:none!important}
+  .topbar,.sidebar,.sidebar-overlay,.map-container,.log-btn,.country-tag{display:none!important}
   .main{margin-left:0}
   body{background:#fff;color:#000;font-size:11pt}
   .report a{color:#000;text-decoration:underline}
@@ -247,19 +236,14 @@ body{background:var(--bg);color:var(--fg);font-family:var(--serif);line-height:1
 <body>
 <div id="progressBar"></div>
 
-<!-- Top bar: minimal -->
 <header class="topbar">
   <button class="menu-btn" onclick="toggleSidebar()">☰</button>
   <span class="logo">Newsroom</span>
   <select class="date-picker" id="datePicker" onchange="selectDate(this.value)"></select>
   <div class="spacer"></div>
-  <button class="btn" id="mapToggle" onclick="toggleMap()">🗺 Map<span class="count" id="mapCount">0</span></button>
 </header>
 
-<!-- Sidebar overlay for mobile -->
 <div class="sidebar-overlay" id="sidebarOverlay" onclick="toggleSidebar()"></div>
-
-<!-- Sidebar: report navigation + TOC -->
 <nav class="sidebar" id="sidebar">
   <div id="reportNav"></div>
   <div class="sidebar-toc" id="sidebarToc" style="display:none">
@@ -268,116 +252,198 @@ body{background:var(--bg);color:var(--fg);font-family:var(--serif);line-height:1
   </div>
 </nav>
 
-<!-- Main area -->
 <div class="main">
-  <div class="map-panel" id="mapPanel"><div id="map"></div></div>
-  <div class="content-area" id="content">
-    <div class="empty">Loading reports…</div>
+  <div class="map-container" id="mapContainer">
+    <div id="map"></div>
+    <div class="map-badge" id="mapBadge">🗺 <span id="mapCount">0</span> locations</div>
+    <div class="map-resize" id="mapResize"></div>
+  </div>
+  <div class="content-scroll" id="contentScroll">
+    <div class="content-area" id="content">
+      <div class="empty">Loading reports…</div>
+    </div>
   </div>
 </div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
 let currentDate=null, currentSlug=null, reports=[], markers=[];
-let map=null, markerLayer=null, mapOpen=false, mapInit=false, coordsCache=null;
+let map=null, markerLayer=null, coordsCache=null;
 const TRUST_COLORS={high:'#22c55e',med:'#eab308',state:'#ef4444'};
 const TRUST_LABELS={high:'🟢 HIGH',med:'🟡 MED',state:'🔴 STATE'};
 
-const SLUG_EMOJI = {
-  world:'🌍', europe:'🇪🇺', mideast:'🕌', africa:'🌍', asia:'🌏', americas:'🌎',
-  'state-media':'📡', tech:'💻', 'tech-ai':'🤖', 'tech-security':'🔒', 'tech-crypto':'₿'
-};
-const GROUP_ORDER = [
-  {title:'NEWS', slugs:['world','europe','mideast','africa','asia','americas','state-media']},
-  {title:'TECH', slugs:['tech','tech-ai','tech-security','tech-crypto']},
-  {title:'ANALYSIS', slugs:[]}, // catches debates etc
+const SLUG_EMOJI={world:'🌍',europe:'🇪🇺',mideast:'🕌',africa:'🌍',asia:'🌏',americas:'🌎','state-media':'📡',tech:'💻','tech-ai':'🤖','tech-security':'🔒','tech-crypto':'₿'};
+const GROUP_ORDER=[
+  {title:'NEWS',slugs:['world','europe','mideast','africa','asia','americas','state-media']},
+  {title:'TECH',slugs:['tech','tech-ai','tech-security','tech-crypto']},
+  {title:'ANALYSIS',slugs:[]},
 ];
+
+// Build a reverse index: country → [{slug, headline, label, trust}]
+let countryIndex = {};
+function buildCountryIndex(){
+  countryIndex = {};
+  markers.forEach(m=>{
+    const key = m.countryKey || m.country.toLowerCase();
+    if(!countryIndex[key]) countryIndex[key] = [];
+    countryIndex[key].push({slug:m.label, headline:m.headline, trust:m.trust, reportSlug: null});
+  });
+  // Also index from report.countries
+  reports.forEach(r=>{
+    (r.countries||[]).forEach(c=>{
+      if(!countryIndex[c]) countryIndex[c]=[];
+      // Check if we already have this report for this country
+      const exists = countryIndex[c].some(e=>e.reportSlug===r.slug);
+      if(!exists) countryIndex[c].push({reportSlug:r.slug, label:r.label, headline:'', trust:'high'});
+    });
+  });
+  // Backfill reportSlug from markers by matching label to report
+  Object.values(countryIndex).forEach(entries=>{
+    entries.forEach(e=>{
+      if(!e.reportSlug){
+        const match = reports.find(r=>r.label===e.slug);
+        if(match) e.reportSlug = match.slug;
+      }
+    });
+  });
+}
+
+// Find best report for a country
+function findReportForCountry(countryKey){
+  const entries = countryIndex[countryKey];
+  if(!entries || !entries.length) return null;
+  // Prefer regional reports over world
+  const regional = entries.find(e=>e.reportSlug && e.reportSlug!=='world' && !e.reportSlug.startsWith('tech'));
+  if(regional) return regional.reportSlug;
+  return entries[0].reportSlug || null;
+}
 
 // Sidebar
 function toggleSidebar(){
   document.getElementById('sidebar').classList.toggle('open');
   document.getElementById('sidebarOverlay').classList.toggle('open');
 }
-
 function buildSidebar(){
-  const nav = document.getElementById('reportNav');
-  nav.innerHTML = '';
-  // Group reports
-  const grouped = GROUP_ORDER.map(g => ({...g, items:[]}));
-  const otherGroup = {title:'OTHER', items:[]};
-  reports.forEach(r => {
-    let placed = false;
-    for(const g of grouped){
-      if(g.slugs.includes(r.slug)){g.items.push(r);placed=true;break}
-    }
+  const nav=document.getElementById('reportNav');
+  nav.innerHTML='';
+  const grouped=GROUP_ORDER.map(g=>({...g,items:[]}));
+  const otherGroup={title:'OTHER',items:[]};
+  reports.forEach(r=>{
+    let placed=false;
+    for(const g of grouped){if(g.slugs.includes(r.slug)){g.items.push(r);placed=true;break}}
     if(!placed){
-      // Check if it's a debate/analysis
-      if(r.isDebate || r.slug.includes('debate') || r.slug.includes('narrative')){
-        grouped.find(g=>g.title==='ANALYSIS').items.push(r);
-      } else {
-        otherGroup.items.push(r);
-      }
+      if(r.isDebate||r.slug.includes('debate')||r.slug.includes('narrative')) grouped.find(g=>g.title==='ANALYSIS').items.push(r);
+      else otherGroup.items.push(r);
     }
   });
   if(otherGroup.items.length) grouped.push(otherGroup);
-
-  grouped.forEach(g => {
+  grouped.forEach(g=>{
     if(!g.items.length) return;
-    const grp = document.createElement('div');
-    grp.className = 'sidebar-group';
-    grp.innerHTML = `<div class="sidebar-group-title">${g.title}</div>`;
-    g.items.forEach(r => {
-      const item = document.createElement('div');
-      item.className = 'sidebar-item' + (r.slug===currentSlug?' active':'');
-      item.dataset.slug = r.slug;
-      const emoji = SLUG_EMOJI[r.slug] || '📄';
-      const shortLabel = r.label.replace(/^[^\w]*/, '').replace(/^(📰|💻|⚖️)\s*/, '');
-      item.innerHTML = `<span class="emoji">${emoji}</span><span class="label">${esc(shortLabel)}</span><span class="read-time">${r.readTime}m</span>`;
-      item.onclick = () => {
-        selectReport(r.slug);
-        // Close mobile sidebar
-        document.getElementById('sidebar').classList.remove('open');
-        document.getElementById('sidebarOverlay').classList.remove('open');
-      };
+    const grp=document.createElement('div');grp.className='sidebar-group';
+    grp.innerHTML=`<div class="sidebar-group-title">${g.title}</div>`;
+    g.items.forEach(r=>{
+      const item=document.createElement('div');
+      item.className='sidebar-item'+(r.slug===currentSlug?' active':'');
+      item.dataset.slug=r.slug;
+      const emoji=SLUG_EMOJI[r.slug]||'📄';
+      const shortLabel=r.label.replace(/^[^\w]*/,'').replace(/^(📰|💻|⚖️)\s*/,'');
+      item.innerHTML=`<span class="emoji">${emoji}</span><span class="label">${esc(shortLabel)}</span><span class="read-time">${r.readTime}m</span>`;
+      item.onclick=()=>{selectReport(r.slug);document.getElementById('sidebar').classList.remove('open');document.getElementById('sidebarOverlay').classList.remove('open')};
       grp.appendChild(item);
     });
     nav.appendChild(grp);
   });
 }
 
-// Map
+// Map — always visible
 function initMap(){
-  if(mapInit) return; mapInit=true;
-  map = L.map('map',{center:[30,20],zoom:2,zoomControl:true,attributionControl:false});
+  map=L.map('map',{center:[30,20],zoom:2,zoomControl:true,attributionControl:false});
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:12}).addTo(map);
-  markerLayer = L.layerGroup().addTo(map);
-}
-function toggleMap(){
-  mapOpen=!mapOpen;
-  document.getElementById('mapPanel').classList.toggle('open',mapOpen);
-  document.getElementById('mapToggle').classList.toggle('active',mapOpen);
-  if(mapOpen){initMap();setTimeout(()=>map.invalidateSize(),320)}
+  markerLayer=L.layerGroup().addTo(map);
 }
 function plotMarkers(mkrs){
-  if(!markerLayer) initMap();
+  if(!markerLayer) return;
   markerLayer.clearLayers();
   document.getElementById('mapCount').textContent=mkrs.length;
+
+  // Group markers by country for richer popups
+  const byCountry={};
   mkrs.forEach(m=>{
-    const color=TRUST_COLORS[m.trust]||TRUST_COLORS.high;
-    const icon=L.divIcon({className:'',html:`<svg width="16" height="16"><circle cx="8" cy="8" r="7" fill="${color}" fill-opacity="0.6" stroke="${color}" stroke-width="1.5"/><circle cx="8" cy="8" r="3" fill="#fff" fill-opacity="0.9"/></svg>`,iconSize:[16,16],iconAnchor:[8,8],popupAnchor:[0,-10]});
-    const mk=L.marker([m.lat,m.lng],{icon});
-    mk.bindPopup(`<div class="marker-popup"><h4>${esc(m.country)}</h4><p style="font-size:.75rem;color:#888">${esc(m.headline)}</p><div class="mp-trust popup-trust-${m.trust}">${TRUST_LABELS[m.trust]||''}</div></div>`,{maxWidth:280});
-    mk._countryKey=m.countryKey||m.country.toLowerCase();
-    mk.on('click',e=>{L.DomEvent.stopPropagation(e);scrollToCountryInArticle(mk._countryKey)});
+    const key=m.countryKey||m.country.toLowerCase();
+    if(!byCountry[key]) byCountry[key]={lat:m.lat,lng:m.lng,country:m.country,countryKey:key,trust:m.trust,items:[]};
+    byCountry[key].items.push(m);
+    // Worst trust wins
+    if(m.trust==='state') byCountry[key].trust='state';
+    else if(m.trust==='med' && byCountry[key].trust!=='state') byCountry[key].trust='med';
+  });
+
+  Object.values(byCountry).forEach(g=>{
+    const color=TRUST_COLORS[g.trust]||TRUST_COLORS.high;
+    const size = Math.min(24, 14 + g.items.length * 2);
+    const icon=L.divIcon({
+      className:'',
+      html:`<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}"><circle cx="${size/2}" cy="${size/2}" r="${size/2-1}" fill="${color}" fill-opacity="0.5" stroke="${color}" stroke-width="1.5"/><circle cx="${size/2}" cy="${size/2}" r="${Math.max(2,size/5)}" fill="#fff" fill-opacity="0.9"/></svg>`,
+      iconSize:[size,size],iconAnchor:[size/2,size/2],popupAnchor:[0,-size/2],
+    });
+    const mk=L.marker([g.lat,g.lng],{icon});
+
+    // Rich popup: show all stories for this country, with links to jump to report
+    let popup=`<div class="marker-popup"><h4>${esc(g.country)}</h4>`;
+    // Deduplicate by headline
+    const seen=new Set();
+    g.items.forEach(m=>{
+      if(seen.has(m.headline)) return; seen.add(m.headline);
+      popup+=`<div class="popup-section">${esc(m.label)}</div>`;
+      popup+=`<div class="popup-headline">${esc(m.headline)}</div>`;
+    });
+    // "Read in [report]" link
+    const bestSlug=findReportForCountry(g.countryKey);
+    if(bestSlug){
+      const bestReport=reports.find(r=>r.slug===bestSlug);
+      const reportLabel=bestReport?bestReport.label:bestSlug;
+      popup+=`<div class="popup-link" data-slug="${bestSlug}" data-country="${g.countryKey}">→ Read in ${esc(reportLabel)}</div>`;
+    }
+    popup+=`</div>`;
+    mk.bindPopup(popup,{maxWidth:300});
+
+    // On popup open, attach click handlers to links
+    mk.on('popupopen',()=>{
+      setTimeout(()=>{
+        document.querySelectorAll('.popup-link[data-slug]').forEach(el=>{
+          el.onclick=()=>{
+            const slug=el.dataset.slug;
+            const country=el.dataset.country;
+            selectReport(slug);
+            // After report loads, scroll to country mention
+            setTimeout(()=>scrollToCountryInArticle(country),300);
+          };
+        });
+      },50);
+    });
+
+    // Click marker → navigate to best report + scroll to country
+    mk.on('click',()=>{
+      if(bestSlug && bestSlug!==currentSlug){
+        selectReport(bestSlug);
+        setTimeout(()=>scrollToCountryInArticle(g.countryKey),300);
+      } else {
+        scrollToCountryInArticle(g.countryKey);
+      }
+    });
+
     mk.addTo(markerLayer);
   });
 }
+
 function panMapToCountry(key){
   if(!coordsCache) return;
-  const c=coordsCache[key]; if(!c) return;
-  if(!mapOpen) toggleMap();
-  setTimeout(()=>{map.flyTo([c.lat,c.lng],5,{duration:.8});markerLayer.eachLayer(l=>{if(Math.abs(l.getLatLng().lat-c.lat)<1&&Math.abs(l.getLatLng().lng-c.lng)<1)l.openPopup()})},mapOpen?50:400);
+  const c=coordsCache[key];if(!c) return;
+  map.flyTo([c.lat,c.lng],5,{duration:.8});
+  markerLayer.eachLayer(l=>{
+    if(Math.abs(l.getLatLng().lat-c.lat)<1&&Math.abs(l.getLatLng().lng-c.lng)<1) l.openPopup();
+  });
 }
+
 function scrollToCountryInArticle(key){
   const names=[key,key.replace(/-/g,' ')];
   const sections=document.querySelectorAll('.section-body');
@@ -389,12 +455,34 @@ function scrollToCountryInArticle(key){
       const walker=document.createTreeWalker(section,NodeFilter.SHOW_TEXT);
       let targetNode=null;
       while(walker.nextNode()){if(names.some(n=>walker.currentNode.textContent.toLowerCase().includes(n.toLowerCase()))){targetNode=walker.currentNode.parentElement;break}}
-      if(targetNode){setTimeout(()=>{targetNode.scrollIntoView({behavior:'smooth',block:'center'});targetNode.classList.add('country-mention-highlight');setTimeout(()=>targetNode.classList.remove('country-mention-highlight'),2500)},50)}
-      else setTimeout(()=>section.scrollIntoView({behavior:'smooth',block:'center'}),50);
+      if(targetNode){
+        setTimeout(()=>{
+          targetNode.scrollIntoView({behavior:'smooth',block:'center'});
+          targetNode.classList.add('country-mention-highlight');
+          setTimeout(()=>targetNode.classList.remove('country-mention-highlight'),2500);
+        },50);
+      } else {
+        setTimeout(()=>section.scrollIntoView({behavior:'smooth',block:'center'}),50);
+      }
       return;
     }
   }
 }
+
+// Map resize drag
+(function(){
+  const handle=document.getElementById('mapResize');
+  const container=document.getElementById('mapContainer');
+  let dragging=false, startY=0, startH=0;
+  handle.addEventListener('mousedown',e=>{dragging=true;startY=e.clientY;startH=container.offsetHeight;e.preventDefault()});
+  document.addEventListener('mousemove',e=>{
+    if(!dragging) return;
+    const newH=Math.max(100,Math.min(window.innerHeight*0.7,startH+(e.clientY-startY)));
+    container.style.height=newH+'px';
+    map.invalidateSize();
+  });
+  document.addEventListener('mouseup',()=>{dragging=false});
+})();
 
 // Data
 async function loadDates(){
@@ -406,6 +494,7 @@ async function loadDates(){
   fetch('/api/coords').then(r=>r.json()).then(c=>coordsCache=c);
   if(dates.length>0) selectDate(dates[0]);
 }
+
 async function selectDate(date){
   currentDate=date;
   document.getElementById('datePicker').value=date;
@@ -413,19 +502,19 @@ async function selectDate(date){
   const data=await res.json();
   reports=data.reports||[];
   markers=data.markers||[];
+  buildCountryIndex();
   plotMarkers(markers);
   buildSidebar();
   if(reports.length>0) selectReport(reports[0].slug);
   else{document.getElementById('content').innerHTML='<div class="empty">No reports for this date.</div>';document.getElementById('tocList').innerHTML=''}
 }
+
 async function selectReport(slug){
   currentSlug=slug;
-  // Update sidebar active state
   document.querySelectorAll('.sidebar-item').forEach(i=>i.classList.toggle('active',i.dataset.slug===slug));
   const r=reports.find(x=>x.slug===slug);
   if(!r) return;
 
-  // Build content
   let html='<div class="report-header">';
   html+=`<h1>${esc(r.label)}</h1>`;
   html+='<div class="report-meta">';
@@ -439,32 +528,42 @@ async function selectReport(slug){
   }
   html+='</div>';
 
-  // Debate viz
-  if(r.isDebate){
-    const debates=await loadDebateData(currentDate);
-    if(debates[slug]) html+=renderDebateViz(debates[slug]);
-  }
-
+  if(r.isDebate){const debates=await loadDebateData(currentDate);if(debates[slug]) html+=renderDebateViz(debates[slug])}
   html+=`<div class="report">${r.html}</div>`;
+
   const content=document.getElementById('content');
   content.innerHTML=html;
-  window.scrollTo({top:0,behavior:'smooth'});
+  document.getElementById('contentScroll').scrollTop=0;
 
   processCollapsibleSections();
   buildTOC();
+
+  // Highlight markers for this report on the map
+  highlightReportOnMap(r);
+}
+
+function highlightReportOnMap(r){
+  // Fly to fit all countries in this report
+  if(!coordsCache||!r.countries||!r.countries.length) return;
+  const points=[];
+  r.countries.forEach(c=>{
+    const cc=coordsCache[c];
+    if(cc) points.push([cc.lat,cc.lng]);
+  });
+  if(points.length>0){
+    const bounds=L.latLngBounds(points);
+    map.flyToBounds(bounds.pad(0.3),{duration:.6,maxZoom:5});
+  }
 }
 
 function processCollapsibleSections(){
   const report=document.querySelector('.report');if(!report)return;
   report.querySelectorAll('h2').forEach((h2,i)=>{
     h2.id='section-'+i;
-    const wrapper=document.createElement('div');
-    wrapper.className='section-header';
+    const wrapper=document.createElement('div');wrapper.className='section-header';
     wrapper.innerHTML='<span class="section-chevron">▼</span>';
-    h2.parentNode.insertBefore(wrapper,h2);
-    wrapper.appendChild(h2);
-    const body=document.createElement('div');
-    body.className='section-body';body.id='body-'+i;
+    h2.parentNode.insertBefore(wrapper,h2);wrapper.appendChild(h2);
+    const body=document.createElement('div');body.className='section-body';body.id='body-'+i;
     wrapper.parentNode.insertBefore(body,wrapper.nextSibling);
     let next=body.nextSibling;
     while(next&&!(next.classList&&next.classList.contains('section-header'))){const move=next;next=next.nextSibling;body.appendChild(move)}
@@ -481,37 +580,33 @@ function buildTOC(){
   if(h2s.length===0){tocSection.style.display='none';return}
   tocSection.style.display='block';
   h2s.forEach((h2,i)=>{
-    const a=document.createElement('a');
-    a.className='toc-link';a.href='#section-'+i;
+    const a=document.createElement('a');a.className='toc-link';a.href='#section-'+i;
     a.textContent=h2.textContent.replace(/^[\d.]+\s*/,'').substring(0,45);
     a.onclick=e=>{e.preventDefault();h2.scrollIntoView({behavior:'smooth',block:'start'})};
     tocList.appendChild(a);
   });
 }
 
-// Progress bar + TOC highlight
-window.addEventListener('scroll',()=>{
+// Progress + TOC highlight
+document.getElementById('contentScroll').addEventListener('scroll',function(){
   const area=document.querySelector('.content-area');if(!area)return;
-  const rect=area.getBoundingClientRect();
-  const total=area.scrollHeight-window.innerHeight;
-  const scrolled=-rect.top;
-  const pct=Math.min(100,Math.max(0,(scrolled/total)*100));
+  const scrollEl=this;
+  const pct=Math.min(100,Math.max(0,(scrollEl.scrollTop/(scrollEl.scrollHeight-scrollEl.clientHeight))*100));
   document.getElementById('progressBar').style.width=pct+'%';
   const h2s=document.querySelectorAll('.report h2');
   const links=document.querySelectorAll('.toc-link');
   let activeIdx=0;
-  h2s.forEach((h2,i)=>{if(h2.getBoundingClientRect().top<150)activeIdx=i});
+  h2s.forEach((h2,i)=>{if(h2.getBoundingClientRect().top<200)activeIdx=i});
   links.forEach((l,i)=>l.classList.toggle('active',i===activeIdx));
 });
 
 // Keyboard
 document.addEventListener('keydown',e=>{
   if(e.target.tagName==='INPUT'||e.target.tagName==='SELECT'||e.target.tagName==='TEXTAREA')return;
-  if(e.key==='m'||e.key==='M'){toggleMap();e.preventDefault()}
-  if(e.key==='ArrowLeft'){nav(-1);e.preventDefault()}
-  if(e.key==='ArrowRight'){nav(1);e.preventDefault()}
+  if(e.key==='ArrowLeft'){navReport(-1);e.preventDefault()}
+  if(e.key==='ArrowRight'){navReport(1);e.preventDefault()}
 });
-function nav(dir){
+function navReport(dir){
   if(!reports.length)return;
   const idx=reports.findIndex(r=>r.slug===currentSlug);
   const next=idx+dir;
@@ -526,8 +621,7 @@ async function loadDebateData(date){if(debateCache[date])return debateCache[date
 const PERSPECTIVE_COLORS={western:'#3b82f6',russian:'#ef4444',chinese:'#f97316',israeli:'#14b8a6',arab:'#22c55e',iranian:'#a855f7',critical:'#06b6d4','global south':'#eab308'};
 
 function renderDebateViz(d){
-  const {scores,divergence,agreement,truth,perspectives,colors}=d;
-  let h='';
+  const{scores,divergence,agreement,truth,perspectives,colors}=d;let h='';
   if(Object.keys(scores).length>0) h+=`<div class="debate-viz"><h3>📊 Narrative Spectrum</h3>${buildSpectrumBar(scores,colors)}</div>`;
   if(Object.keys(divergence||{}).length>0) h+=`<div class="debate-viz"><h3>🕸 Divergence Radar</h3>${buildRadarChart(divergence,colors)}</div>`;
   if(Object.keys(agreement||{}).length>0) h+=`<div class="debate-viz"><h3>🔥 Agreement Heatmap</h3>${buildHeatmap(agreement,perspectives,colors)}</div>`;
@@ -535,11 +629,9 @@ function renderDebateViz(d){
   return h;
 }
 function buildSpectrumBar(scores,colors){
-  const total=Object.values(scores).reduce((a,b)=>a+b,0)||1;
   let h='<div class="spectrum-bar">';
   Object.entries(scores).sort((a,b)=>b[1]-a[1]).forEach(([p,s])=>{
-    const c=colors[p]||'#888';
-    h+=`<div class="spectrum-segment" style="flex:${s};background:${c}" onclick="scrollToDebateSection('${p}')">${s}<div class="spectrum-tooltip">${p}: ${s}/100</div></div>`;
+    h+=`<div class="spectrum-segment" style="flex:${s};background:${colors[p]||'#888'}">${s}<div class="spectrum-tooltip">${p}: ${s}/100</div></div>`;
   });
   h+='</div><div class="spectrum-legend">';
   Object.entries(scores).sort((a,b)=>b[1]-a[1]).forEach(([p,s])=>{h+=`<span class="legend-item"><span class="legend-dot" style="background:${colors[p]||'#888'}"></span>${p} ${s}</span>`});
@@ -552,15 +644,15 @@ function buildHeatmap(agreement,perspectives,colors){
   perspectives.forEach((row,i)=>{
     h+=`<div class="heatmap-row-label" style="color:${colors[row]||'#888'}">${row}</div>`;
     perspectives.forEach((col,j)=>{
-      if(i===j){h+='<div class="heatmap-cell self">—</div>'}
-      else{const k1=`${row}-${col}`,k2=`${col}-${row}`;const v=agreement[k1]||agreement[k2]||'partial';h+=`<div class="heatmap-cell ${v}">${icons[v]}<div class="heatmap-tooltip">${row} ↔ ${col}: ${labels[v]}</div></div>`}
+      if(i===j)h+='<div class="heatmap-cell self">—</div>';
+      else{const v=agreement[`${row}-${col}`]||agreement[`${col}-${row}`]||'partial';h+=`<div class="heatmap-cell ${v}">${icons[v]}<div class="heatmap-tooltip">${row} ↔ ${col}: ${labels[v]}</div></div>`}
     });
   });
   return h+'</div>';
 }
 function buildTruthGauge(truth){
   const pos=truth.position||50;
-  return `<div class="truth-gauge"><div class="truth-gauge-fill"></div><div class="truth-gauge-marker" style="left:calc(${pos}% - 14px)">${pos}</div></div><div class="truth-labels"><span>${truth.left_label||'Mainstream'}</span><span>${truth.right_label||'Counter-narrative'}</span></div>`;
+  return`<div class="truth-gauge"><div class="truth-gauge-fill"></div><div class="truth-gauge-marker" style="left:calc(${pos}% - 14px)">${pos}</div></div><div class="truth-labels"><span>${truth.left_label||'Mainstream'}</span><span>${truth.right_label||'Counter-narrative'}</span></div>`;
 }
 function buildRadarChart(divergence,colors){
   const dims=Object.keys(divergence);if(!dims.length)return'';
@@ -577,6 +669,8 @@ function scrollToDebateSection(p){
   for(const h2 of h2s){if(h2.textContent.toLowerCase().includes(p.toLowerCase())){const hdr=h2.closest('.section-header');if(hdr&&hdr.classList.contains('collapsed'))hdr.click();setTimeout(()=>h2.scrollIntoView({behavior:'smooth',block:'start'}),100);return}}
 }
 
+// Init map immediately (always visible)
+initMap();
 loadDates();
 </script>
 </body>
