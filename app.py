@@ -1,148 +1,38 @@
 #!/usr/bin/env python3
 """Newsroom — Daily Intelligence Report Dashboard"""
 
-import os
 import re
 from collections import defaultdict
 from pathlib import Path
+from urllib.parse import urlparse
 
-from flask import Flask, jsonify, render_template, abort
+from flask import Flask, jsonify, render_template, abort, request
 import markdown
+
+from config import REPORTS_DIR, HOST, PORT, DEBUG, DB_PATH
+from constants import (
+    COORDS, LOCATION_ALIASES, LOCATION_RE, CATEGORY_MAP, SLUG_LABELS,
+    SLUG_ORDER, PERSPECTIVE_COLORS, extract_countries, parse_filename,
+    slug_to_category,
+)
 
 app = Flask(__name__)
 
-REPORTS_DIR = Path(os.environ.get("REPORTS_DIR", "/home/hk/.openclaw/workspace/reports"))
+# Lazy DB singleton
+_db = None
+def get_db():
+    global _db
+    if _db is None:
+        from db import NewsDB
+        _db = NewsDB(DB_PATH)
+    return _db
 
-CATEGORY_MAP = {
-    "world": ("🌍 World Overview", 0),
-    "europe": ("📰 Regional", 1),
-    "mideast": ("📰 Regional", 1),
-    "africa": ("📰 Regional", 1),
-    "asia": ("📰 Regional", 1),
-    "americas": ("📰 Regional", 1),
-    "state-media": ("📰 Regional", 1),
-    "tech": ("💻 Tech", 2),
-    "tech-ai": ("💻 Tech", 2),
-    "tech-security": ("💻 Tech", 2),
-    "tech-crypto": ("💻 Tech", 2),
-}
-
-PERSPECTIVE_COLORS = {
-    "western": "#3b82f6",
-    "russian": "#ef4444",
-    "chinese": "#f97316",
-    "israeli": "#14b8a6",
-    "arab": "#22c55e",
-    "iranian": "#a855f7",
-    "critical": "#06b6d4",
-    "global south": "#eab308",
-}
-
-SLUG_LABELS = {
-    "world": "🌍 World",
-    "europe": "📰 Europe",
-    "mideast": "📰 Mideast",
-    "africa": "📰 Africa",
-    "asia": "📰 Asia-Pacific",
-    "americas": "📰 Americas",
-    "state-media": "📰 State Media",
-    "tech": "💻 Tech",
-    "tech-ai": "💻 AI",
-    "tech-security": "💻 Security",
-    "tech-crypto": "💻 Crypto",
-}
-
-# Canonical order for tab display
-SLUG_ORDER = [
-    "world", "europe", "mideast", "africa", "asia", "americas",
-    "state-media", "tech", "tech-ai", "tech-security", "tech-crypto",
-]
-
-COORDS = {
-    "norway": (59.9, 10.7), "sweden": (59.3, 18.1), "finland": (60.2, 24.9),
-    "uk": (51.5, -0.1), "france": (48.9, 2.3), "germany": (52.5, 13.4),
-    "spain": (40.4, -3.7), "italy": (41.9, 12.5), "belgium": (50.8, 4.4),
-    "ukraine": (50.4, 30.5), "russia": (55.8, 37.6), "turkey": (41.0, 28.9),
-    "iran": (35.7, 51.4), "israel": (31.8, 35.2), "palestine": (31.9, 35.2),
-    "gaza": (31.5, 34.5), "lebanon": (33.9, 35.5), "saudi": (24.7, 46.7),
-    "qatar": (25.3, 51.5), "uae": (24.5, 54.4), "iraq": (33.3, 44.4),
-    "syria": (33.5, 36.3), "yemen": (15.4, 44.2),
-    "china": (39.9, 116.4), "japan": (35.7, 139.7), "india": (28.6, 77.2),
-    "south korea": (37.6, 127.0), "pakistan": (33.7, 73.0), "bangladesh": (23.8, 90.4),
-    "indonesia": (6.2, 106.8), "taiwan": (25.0, 121.5),
-    "usa": (38.9, -77.0), "canada": (45.4, -75.7), "mexico": (19.4, -99.1),
-    "brazil": (-15.8, -47.9), "venezuela": (10.5, -66.9),
-    "sudan": (15.6, 32.5), "ethiopia": (9.0, 38.7), "south africa": (-33.9, 18.4),
-    "nigeria": (9.1, 7.5), "madagascar": (-18.9, 47.5), "kenya": (-1.3, 36.8),
-    "mozambique": (-25.9, 32.6), "niger": (13.5, 2.1), "ghana": (5.6, -0.2),
-    "switzerland": (46.9, 7.4), "oman": (23.6, 58.5),
-}
-
-LOCATION_ALIASES = {
-    "united states": "usa", "u.s.": "usa", "america": "usa", "washington": "usa",
-    "american": "usa", "pentagon": "usa", "white house": "usa",
-    "britain": "uk", "british": "uk", "england": "uk", "london": "uk",
-    "scottish": "uk", "scotland": "uk",
-    "paris": "france", "french": "france",
-    "berlin": "germany", "german": "germany",
-    "moscow": "russia", "russian": "russia", "kremlin": "russia",
-    "beijing": "china", "chinese": "china",
-    "tokyo": "japan", "japanese": "japan",
-    "iranian": "iran", "tehran": "iran",
-    "israeli": "israel", "tel aviv": "israel", "jerusalem": "israel", "netanyahu": "israel",
-    "palestinian": "palestine", "west bank": "palestine",
-    "turkish": "turkey", "ankara": "turkey", "istanbul": "turkey",
-    "ukrainian": "ukraine", "kyiv": "ukraine", "kiev": "ukraine",
-    "saudi arabia": "saudi", "riyadh": "saudi",
-    "iraqi": "iraq", "baghdad": "iraq",
-    "syrian": "syria", "damascus": "syria",
-    "lebanese": "lebanon", "beirut": "lebanon", "hezbollah": "lebanon",
-    "yemeni": "yemen", "houthi": "yemen", "houthis": "yemen",
-    "indian": "india", "delhi": "india", "mumbai": "india", "new delhi": "india",
-    "pakistani": "pakistan",
-    "south korean": "south korea", "seoul": "south korea", "korean": "south korea",
-    "taiwanese": "taiwan", "taipei": "taiwan",
-    "brazilian": "brazil",
-    "mexican": "mexico",
-    "canadian": "canada", "ottawa": "canada",
-    "sudanese": "sudan", "khartoum": "sudan",
-    "ethiopian": "ethiopia",
-    "nigerian": "nigeria",
-    "kenyan": "kenya", "nairobi": "kenya",
-    "swiss": "switzerland", "geneva": "switzerland", "zurich": "switzerland",
-    "omani": "oman", "muscat": "oman",
-    "spanish": "spain", "madrid": "spain",
-    "italian": "italy", "rome": "italy",
-    "belgian": "belgium", "brussels": "belgium",
-    "norwegian": "norway", "oslo": "norway",
-    "swedish": "sweden", "stockholm": "sweden",
-    "finnish": "finland", "helsinki": "finland",
-    "qatari": "qatar", "doha": "qatar",
-    "emirati": "uae", "dubai": "uae", "abu dhabi": "uae",
-    "venezuelan": "venezuela", "caracas": "venezuela",
-    "indonesian": "indonesia", "jakarta": "indonesia",
-    "ghanaian": "ghana", "accra": "ghana",
-    "strait of hormuz": "oman",
-    "arabian sea": "oman",
-}
-
+# Location lookup (flat dict: name/alias → coords key)
 _all_locations = {}
 for k in COORDS:
     _all_locations[k] = k
 for alias, key in LOCATION_ALIASES.items():
     _all_locations[alias] = key
-_LOCATION_PATTERNS = sorted(_all_locations.keys(), key=len, reverse=True)
-_LOCATION_RE = re.compile(
-    r'\b(' + '|'.join(re.escape(p) for p in _LOCATION_PATTERNS) + r')(?:\b|(?=\s|[,.\-:;\'"!\?]))',
-    re.IGNORECASE
-)
-
-
-def parse_filename(name):
-    m = re.match(r"^(\d{4}-\d{2}-\d{2})-(.+)\.md$", name)
-    if not m:
-        return None
-    return m.group(1), m.group(2)
 
 
 def render_md(text):
@@ -159,14 +49,8 @@ def render_md(text):
 
 
 def render_log_md(text):
-    """Render log markdown - make all URLs clickable even if not in markdown link format."""
-    # First do normal markdown render
-    html = markdown.markdown(
-        text,
-        extensions=["tables", "fenced_code", "nl2br"],
-    )
+    html = markdown.markdown(text, extensions=["tables", "fenced_code", "nl2br"])
     html = html.replace("<a ", '<a target="_blank" rel="noopener" ')
-    # Make bare URLs clickable (not already in href)
     html = re.sub(
         r'(?<!href=")(?<!">)(https?://[^\s<>"]+)',
         r'<a href="\1" target="_blank" rel="noopener">\1</a>',
@@ -197,10 +81,9 @@ def extract_headline(text):
     return "Report"
 
 
-def extract_headings(html):
-    """Extract h2 headings for TOC generation (done client-side, but we pass raw text headings)."""
+def extract_headings(text):
     headings = []
-    for m in re.finditer(r'^##\s+(.+)$', html, re.MULTILINE):
+    for m in re.finditer(r'^##\s+(.+)$', text, re.MULTILINE):
         headings.append(m.group(1).strip())
     return headings
 
@@ -216,19 +99,6 @@ def detect_trust(text):
     return "high"
 
 
-def extract_countries_from_text(text):
-    """Return list of unique country keys mentioned in text."""
-    found = _LOCATION_RE.findall(text)
-    seen = []
-    seen_keys = set()
-    for loc_match in found:
-        key = _all_locations.get(loc_match.lower())
-        if key and key not in seen_keys:
-            seen_keys.add(key)
-            seen.append(key)
-    return seen
-
-
 def extract_geo_markers(text, slug, label):
     headline = extract_headline(text)
     sections = re.split(r'\n(?=## )', text)
@@ -241,7 +111,7 @@ def extract_geo_markers(text, slug, label):
         if first_line.startswith("## "):
             section_headline = first_line.lstrip("# ").strip()
         trust = detect_trust(section)
-        found = _LOCATION_RE.findall(section)
+        found = LOCATION_RE.findall(section)
         for loc_match in found:
             key = _all_locations.get(loc_match.lower())
             if not key or key in seen_locations:
@@ -258,7 +128,6 @@ def extract_geo_markers(text, slug, label):
 
 
 def parse_source_diversity(text):
-    """Parse source diversity from log files for visualization."""
     scores = {}
     in_diversity = False
     for line in text.splitlines():
@@ -280,10 +149,8 @@ def is_debate_report(slug):
 
 
 def parse_debate_data(text):
-    """Parse debate metadata from markdown comments."""
     data = {"scores": {}, "divergence": {}, "agreement": {}, "truth": {}, "perspectives": list(PERSPECTIVE_COLORS.keys())}
 
-    # Parse scores
     scores_match = re.search(r'<!-- DEBATE_SCORES\n(.*?)\n-->', text, re.DOTALL)
     if scores_match:
         for line in scores_match.group(1).strip().splitlines():
@@ -291,7 +158,6 @@ def parse_debate_data(text):
             if m:
                 data["scores"][m.group(1).strip().lower()] = int(m.group(2))
 
-    # Parse divergence dimensions
     div_match = re.search(r'<!-- DEBATE_DIVERGENCE\n(.*?)\n-->', text, re.DOTALL)
     if div_match:
         for line in div_match.group(1).strip().splitlines():
@@ -305,7 +171,6 @@ def parse_debate_data(text):
                         vals[pm.group(1).strip().lower()] = int(pm.group(2))
                 data["divergence"][dim_name] = vals
 
-    # Parse agreement matrix
     agr_match = re.search(r'<!-- DEBATE_AGREEMENT\n(.*?)\n-->', text, re.DOTALL)
     if agr_match:
         for line in agr_match.group(1).strip().splitlines():
@@ -314,7 +179,6 @@ def parse_debate_data(text):
                 a, b, val = m.group(1).strip().lower(), m.group(2).strip().lower(), m.group(3).strip().lower()
                 data["agreement"][f"{a}-{b}"] = val
 
-    # Parse truth landscape
     truth_match = re.search(r'<!-- DEBATE_TRUTH\n(.*?)\n-->', text, re.DOTALL)
     if truth_match:
         for line in truth_match.group(1).strip().splitlines():
@@ -327,25 +191,19 @@ def parse_debate_data(text):
                 except ValueError:
                     data["truth"][key] = val
 
-    # Fallback: parse scores from natural format (### Heading ... **Evidence Score: XX/100**)
+    # Fallback: parse scores from natural format
     if not data["scores"]:
         perspective_map = {
-            "western establishment": "western",
-            "western critical": "critical",
-            "russian": "russian",
-            "chinese": "chinese",
-            "israeli": "israeli",
-            "arab": "arab",
-            "sunni": "arab",
-            "iranian": "iranian",
-            "shia": "iranian",
+            "western establishment": "western", "western critical": "critical",
+            "russian": "russian", "chinese": "chinese", "israeli": "israeli",
+            "arab": "arab", "sunni": "arab", "iranian": "iranian", "shia": "iranian",
             "global south": "global south",
         }
         current_perspective = None
         for line in text.splitlines():
             h3 = re.match(r'^###\s+(.+)', line)
             if h3:
-                heading = re.sub(r'[🇺🇸🇬🇧🇫🇷🇷🇺🇨🇳🇮🇱🇸🇦🇶🇦🇮🇷🌍📰\U0001F1E0-\U0001F1FF]', '', h3.group(1)).strip().lower()
+                heading = re.sub(r'[\U0001F1E0-\U0001F1FF\U0001F300-\U0001F9FF]', '', h3.group(1)).strip().lower()
                 current_perspective = None
                 for key, val in perspective_map.items():
                     if key in heading:
@@ -355,7 +213,7 @@ def parse_debate_data(text):
             if score_m and current_perspective:
                 data["scores"][current_perspective] = int(score_m.group(1))
 
-    # Auto-generate agreement matrix from score proximity if not provided
+    # Auto-generate agreement from score proximity
     if not data["agreement"] and len(data["scores"]) >= 2:
         perspectives = list(data["scores"].keys())
         for i, a in enumerate(perspectives):
@@ -369,37 +227,17 @@ def parse_debate_data(text):
                     val = "conflict"
                 data["agreement"][f"{a}-{b}"] = val
 
-    # Auto-generate truth position from mean score if not provided
     if not data["truth"] and data["scores"]:
         avg = sum(data["scores"].values()) / len(data["scores"])
         data["truth"] = {"position": round(avg), "left_label": "Strong Evidence", "right_label": "Weak Evidence"}
 
-    # Filter perspectives to only those with scores
     data["perspectives"] = [p for p in PERSPECTIVE_COLORS if p in data["scores"]]
     data["colors"] = {p: PERSPECTIVE_COLORS[p] for p in data["perspectives"]}
 
     return data
 
 
-@app.route("/api/debate-data/<date>")
-def api_debate_data(date):
-    if not re.match(r"^\d{4}-\d{2}-\d{2}$", date):
-        return jsonify({"error": "bad date"}), 400
-
-    debates = {}
-    if REPORTS_DIR.exists():
-        for f in sorted(REPORTS_DIR.iterdir()):
-            parsed = parse_filename(f.name)
-            if not parsed or parsed[0] != date or not is_debate_report(parsed[1]):
-                continue
-            content = f.read_text(encoding="utf-8")
-            debate = parse_debate_data(content)
-            debate["slug"] = parsed[1]
-            debate["headline"] = extract_headline(content)
-            debates[parsed[1]] = debate
-
-    return jsonify(debates)
-
+# === Routes ===
 
 @app.route("/")
 def index():
@@ -437,35 +275,61 @@ def api_reports(date):
                 label = "⚖️ " + extract_headline(content)[:40]
             else:
                 label = SLUG_LABELS.get(slug, slug.replace("-", " ").title())
-            countries = extract_countries_from_text(content)
+            countries = extract_countries(content)
             headings = extract_headings(content)
             read_time = reading_time_minutes(content)
-
-            # Check if log file exists
             log_file = REPORTS_DIR / f"{date}-{slug}-log.md"
             has_log = log_file.exists()
-
             is_debate = is_debate_report(slug)
 
             reports_list.append({
-                "slug": slug,
-                "label": label,
-                "html": html,
-                "countries": countries,
-                "headings": headings,
-                "readTime": read_time,
-                "hasLog": has_log,
-                "isDebate": is_debate,
+                "slug": slug, "label": label, "html": html,
+                "countries": countries, "headings": headings,
+                "readTime": read_time, "hasLog": has_log, "isDebate": is_debate,
             })
 
             markers = extract_geo_markers(content, slug, label)
             all_markers.extend(markers)
 
-    # Sort by canonical order
     slug_order_map = {s: i for i, s in enumerate(SLUG_ORDER)}
     reports_list.sort(key=lambda r: slug_order_map.get(r["slug"], 99))
 
     return jsonify({"reports": reports_list, "markers": all_markers})
+
+
+@app.route("/api/debate-data/<date>")
+def api_debate_data(date):
+    if not re.match(r"^\d{4}-\d{2}-\d{2}$", date):
+        return jsonify({"error": "bad date"}), 400
+
+    debates = {}
+    if REPORTS_DIR.exists():
+        for f in sorted(REPORTS_DIR.iterdir()):
+            parsed = parse_filename(f.name)
+            if not parsed or parsed[0] != date or not is_debate_report(parsed[1]):
+                continue
+            content = f.read_text(encoding="utf-8")
+            debate = parse_debate_data(content)
+            debate["slug"] = parsed[1]
+            debate["headline"] = extract_headline(content)
+            debates[parsed[1]] = debate
+
+    return jsonify(debates)
+
+
+@app.route("/api/search")
+def api_search():
+    """Full-text search across all reports."""
+    q = request.args.get("q", "").strip()
+    if not q or len(q) < 2:
+        return jsonify({"error": "query too short", "results": []}), 400
+    limit = min(int(request.args.get("limit", 20)), 50)
+    try:
+        db = get_db()
+        results = db.search(q, limit=limit)
+        return jsonify({"results": results, "query": q})
+    except Exception as e:
+        return jsonify({"error": str(e), "results": []}), 500
 
 
 @app.route("/api/map-data")
@@ -497,9 +361,7 @@ def api_map_data():
                 country_data[key]["country"] = key
                 country_data[key]["countryKey"] = m["countryKey"]
                 country_data[key]["headlines"].append({
-                    "title": m["headline"],
-                    "section": m["label"],
-                    "trust": m["trust"],
+                    "title": m["headline"], "section": m["label"], "trust": m["trust"],
                 })
                 cur = country_data[key]["trust"]
                 if m["trust"] == "state" or cur == "state":
@@ -526,9 +388,8 @@ def report_log(date, slug):
 
 @app.route("/api/coords")
 def api_coords():
-    """Return all known coordinates for client-side map panning."""
     return jsonify({k: {"lat": v[0], "lng": v[1]} for k, v in COORDS.items()})
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=3118, debug=False)
+    app.run(host=HOST, port=PORT, debug=DEBUG)
