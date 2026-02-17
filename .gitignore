@@ -1,3 +1,7 @@
 __pycache__/
 *.pyc
+newsroom.db
 .env
+data/
+newsroom.db-shm
+newsroom.db-wal
